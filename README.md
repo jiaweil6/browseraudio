@@ -41,11 +41,18 @@ rec = Recorder(duration=3.0)
 rec                      # shows a "● Record 3s" button — click it, then speak
 ```
 
+After it captures, an inline player appears so you can hear the take. Then,
+**in the next cell**, use the audio:
+
 ```python
-# ...in the next cell, after recording:
 rec.samples              # float32 ndarray, shape (n_frames, 1)
 rec.sample_rate          # e.g. 48000
 ```
+
+> Why two cells? A single-cell `await record()` can't work in Jupyter/thebe —
+> the kernel doesn't process the widget's reply while that same cell is still
+> running, so the recording would never arrive. Display in one cell, use it in
+> the next.
 
 With [pyquist](https://github.com/gclef-cmu/pyquist) installed, get an `Audio`
 object directly:
@@ -72,8 +79,6 @@ in JupyterLite and thebe-lite.
 - **Playback** — push a buffer to a main-thread `AudioContext` (`play`).
 - **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode` used
   in v0.
-- **Async API** — `await record(seconds)` returning the audio directly, instead
-  of the display-then-read-in-another-cell pattern.
 - **sounddevice-compatible facade** — expose `play` / `rec` / `wait` /
   `query_devices` so a library like pyquist works in the browser **unchanged**
   (a real `sounddevice` replacement, not a stub).

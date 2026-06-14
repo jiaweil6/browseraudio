@@ -82,7 +82,9 @@ def record(duration: float = 3.0) -> Recorder:
     """Create, display, and return a :class:`Recorder`.
 
     Click **Record**, then read ``.samples`` (or ``.to_pyquist()``) in a
-    later cell.
+    *later* cell. (A single-cell ``await`` flow can't work in Jupyter/thebe:
+    the kernel doesn't process the widget-comm reply while the same cell is
+    still running, so the recording would never arrive — hence two cells.)
     """
     from IPython.display import display
 

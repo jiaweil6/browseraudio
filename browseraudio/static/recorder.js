@@ -4,7 +4,8 @@
 // The Python kernel that drives this widget may be in a Web Worker
 // (JupyterLite / thebe-lite), which has no access to those APIs — so the
 // capture happens here and the samples are handed back to Python over the
-// widget comm channel (base64-encoded float32 PCM).
+// widget comm channel (base64-encoded float32 PCM). After capturing, an
+// inline <audio> player is shown so the user can hear the take immediately.
 //
 // v0 uses ScriptProcessorNode: deprecated but universally supported and
 // dependency-free. A future version should move to an AudioWorklet.
@@ -19,20 +20,54 @@ function toBase64(buffer) {
   return btoa(binary);
 }
 
+// Encode float32 [-1, 1] mono samples as a 16-bit PCM WAV blob (for the
+// inline preview player only; Python receives the full-precision float32).
+function wavBlob(samples, sampleRate) {
+  const n = samples.length;
+  const buffer = new ArrayBuffer(44 + n * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + n * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, n * 2, true);
+  let offset = 44;
+  for (let i = 0; i < n; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
 async function render({ model, el }) {
   const button = document.createElement("button");
   button.className = "jupyter-button";
   const status = document.createElement("span");
   status.style.marginLeft = "0.5em";
+  const player = document.createElement("div"); // holds the inline preview
+  player.style.marginTop = "0.5em";
 
   const label = () => "● Record " + model.get("duration") + "s";
   button.textContent = label();
   model.on("change:duration", () => (button.textContent = label()));
-  el.append(button, status);
+  el.append(button, status, player);
 
   button.addEventListener("click", async () => {
     button.disabled = true;
     status.textContent = "recording…";
+    player.replaceChildren();
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -75,6 +110,13 @@ async function render({ model, el }) {
       if (!total) model.set("_error", "no audio was captured");
       model.save_changes();
       status.textContent = "recorded " + (total / sampleRate).toFixed(2) + "s";
+
+      if (total) {
+        const audio = document.createElement("audio");
+        audio.controls = true;
+        audio.src = URL.createObjectURL(wavBlob(pcm, sampleRate));
+        player.append(audio);
+      }
     } catch (err) {
       model.set("_error", String(err));
       model.save_changes();
