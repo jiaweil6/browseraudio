@@ -13,4 +13,4 @@ so libraries like pyquist work unchanged in the browser).
 from ._recorder import Recorder, record
 
 __all__ = ["Recorder", "record"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"

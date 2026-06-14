@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browseraudio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Microphone capture for in-browser Python (Pyodide / JupyterLite) via the Web Audio API."
 readme = "README.md"
 requires-python = ">=3.9"

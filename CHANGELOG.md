@@ -8,6 +8,13 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 _Nothing yet._
 
+## [0.1.1] — 2026-06-14
+
+### Changed
+- Overhauled the README (contents TOC, requirements, full API reference,
+  troubleshooting, and development sections) and added this changelog.
+  Documentation only — no code changes.
+
 ## [0.1.0] — 2026-06-14
 
 First public release.
@@ -32,5 +39,6 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jiaweil6/browseraudio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jiaweil6/browseraudio/releases/tag/v0.1.0
