@@ -1,99 +1,90 @@
 # browseraudio
 
-Microphone capture for **in-browser Python** — Pyodide, JupyterLite, thebe-lite —
-via the browser's Web Audio API.
+[![PyPI](https://img.shields.io/pypi/v/browseraudio.svg)](https://pypi.org/project/browseraudio/)
+[![Python](https://img.shields.io/pypi/pyversions/browseraudio.svg)](https://pypi.org/project/browseraudio/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-When Python runs in the browser it usually lives in a **Web Worker**, where the
-Web Audio API and `getUserMedia` don't exist and the DOM is out of reach. So
-the classic audio stack (`sounddevice` → PortAudio) can't run, and libraries
-that depend on it fall back to "not available" stubs. `browseraudio` bridges
-that gap: it captures audio on the browser's **main thread** (through a tiny
-[`anywidget`](https://anywidget.dev) frontend) and hands the samples back to the
-Python kernel over the widget comm channel.
+**Microphone capture for in-browser Python** — record from the mic in
+[Pyodide](https://pyodide.org), [JupyterLite](https://jupyterlite.readthedocs.io),
+and [thebe](https://github.com/jupyter-book/thebe), straight into a NumPy array.
 
-> **Status: v0 — recording only, and a foundation to build on.** The full
-> round-trip is proven end-to-end under thebe-lite (Pyodide 0.27.7): a 1-second
-> capture returned a float32 array, shape `(48000, 1)` at 48 kHz, with real
-> signal. See the roadmap for what's next.
+In the browser, Python usually runs in a Web Worker with no access to
+`getUserMedia` or the Web Audio API — so the usual `sounddevice` → PortAudio
+stack can't run. `browseraudio` captures audio on the page's main thread (via a
+tiny [anywidget](https://anywidget.dev) frontend) and hands the float32 samples
+back to the kernel, so recording works even from a worker.
+
+> **Status:** recording only — the foundation. Playback and a drop-in
+> `sounddevice` replacement are on the [roadmap](#roadmap).
 
 ## Install
 
 ```sh
-pip install browseraudio          # in a normal environment
+pip install browseraudio
 ```
 
-In a browser kernel, install at runtime with micropip:
+In a browser kernel (JupyterLite / thebe), install at runtime with micropip:
 
 ```python
 import micropip
 await micropip.install("browseraudio")
 ```
 
-## Use
+## Quickstart
 
-The recording finishes *after* you click the button, so read the result in a
-**separate cell** from the one that shows the widget:
-
-```python
-from browseraudio import Recorder
-
-rec = Recorder(duration=3.0)
-rec                      # shows a "● Record 3s" button — click it, then speak
-```
-
-After it captures, an inline player appears so you can hear the take. Then,
-**in the next cell**, use the audio:
+Recording finishes *after* you click, so display the recorder in one cell and
+read the result in the next.
 
 ```python
-rec.samples              # float32 ndarray, shape (n_frames, 1)
-rec.sample_rate          # e.g. 48000
+from browseraudio import record
+
+rec = record(3.0)          # shows "● Record 3s" — click it, allow the mic, speak
 ```
 
-> Why two cells? A single-cell `await record()` can't work in Jupyter/thebe —
+An inline player appears so you can hear the take. Then, **in a new cell**:
+
+```python
+rec.samples                # float32 ndarray, shape (n_frames, 1)
+rec.sample_rate            # e.g. 48000
+rec.to_pyquist()           # a pyquist.Audio, if pyquist is installed
+```
+
+> **Why two cells?** A single-cell `await record()` can't work in Jupyter/thebe:
 > the kernel doesn't process the widget's reply while that same cell is still
-> running, so the recording would never arrive. Display in one cell, use it in
-> the next.
-
-With [pyquist](https://github.com/gclef-cmu/pyquist) installed, get an `Audio`
-object directly:
-
-```python
-clip = rec.to_pyquist()  # pyquist.Audio
-```
+> running, so the recording would never arrive.
 
 ## How it works
 
-```
- main thread (browser)                         worker (Python kernel)
- ─────────────────────                         ──────────────────────
- getUserMedia → AudioContext  ──comm (base64 float32)──►  numpy float32
- (anywidget frontend)                                     Recorder.samples
-```
+A browser tab has two Python-relevant execution contexts, and browseraudio uses
+both:
 
-The kernel→page direction (displaying the widget) and the page→kernel direction
-(sending samples back) both ride the standard Jupyter widget comm, which works
-in JupyterLite and thebe-lite.
+1. **The page (main thread)** has the Web Audio API and `getUserMedia`, but not
+   your Python kernel. An [anywidget](https://anywidget.dev) frontend lives here
+   and does the actual capture, then encodes the float32 samples.
+2. **The worker** runs your Python kernel (this is how Pyodide/JupyterLite keep
+   the page responsive), but it can't reach those audio APIs. It receives the
+   encoded samples and decodes them into a NumPy array as `rec.samples`.
+
+The two contexts talk over the **standard Jupyter widget comm channel** — the
+same mechanism any `ipywidgets` widget uses — so browseraudio works wherever
+widgets do: JupyterLite, thebe-lite, classic Jupyter, and marimo.
 
 ## Roadmap
 
-- **Playback** — push a buffer to a main-thread `AudioContext` (`play`).
-- **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode` used
-  in v0.
-- **sounddevice-compatible facade** — expose `play` / `rec` / `wait` /
-  `query_devices` so a library like pyquist works in the browser **unchanged**
-  (a real `sounddevice` replacement, not a stub).
-- **Streaming** (stretch) — generator → ring buffer → AudioWorklet. Bounded by
-  the browser: Python can't run in the audio thread, and `SharedArrayBuffer`
-  needs cross-origin-isolation (COOP/COEP) headers.
+- **Playback** — push a buffer to a main-thread `AudioContext`.
+- **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode`.
+- **`sounddevice`-compatible facade** — `play` / `rec` / `wait` so libraries
+  like [pyquist](https://github.com/gclef-cmu/pyquist) run in the browser
+  unchanged (a real replacement, not a stub).
+- **Streaming** (stretch) — generator → ring buffer → AudioWorklet.
 
 ## Caveats
 
-- Recording needs **HTTPS** (or `localhost`), a **user gesture** (the button),
-  and the browser's microphone-permission prompt.
-- v0 transfers samples as base64 over the comm — simple and robust; binary comm
-  buffers would be more efficient.
-- v0 uses `ScriptProcessorNode` (deprecated but universally supported).
+- Needs **HTTPS** (or `localhost`), a **user gesture** (the button), and the
+  browser's microphone-permission prompt.
+- Transfers samples as base64 over the comm (simple and robust; binary buffers
+  would be leaner) and uses `ScriptProcessorNode` (deprecated but universal).
 
 ## License
 
-MIT
+[MIT](LICENSE)
