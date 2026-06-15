@@ -8,6 +8,13 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 _Nothing yet._
 
+## [0.1.2] — 2026-06-15
+
+### Fixed
+- A recording of `duration` seconds now returns exactly `round(duration *
+  sample_rate)` samples. Previously it overshot by up to one capture block
+  (~85 ms at 48 kHz), so `record(3.0)` produced ~3.07 s.
+
 ## [0.1.1] — 2026-06-14
 
 ### Changed
@@ -39,6 +46,7 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jiaweil6/browseraudio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jiaweil6/browseraudio/releases/tag/v0.1.0

@@ -98,20 +98,25 @@ async function render({ model, el }) {
       source.disconnect();
       ctx.close();
 
-      const pcm = new Float32Array(total);
+      // ScriptProcessor delivers fixed 4096-sample blocks, so `total` overshoots
+      // the request by up to one block. Trim to exactly the requested duration
+      // (but no more than we captured, in case the safety timeout fired early).
+      const length = Math.min(total, Math.round(duration * sampleRate));
+      const pcm = new Float32Array(length);
       let offset = 0;
       for (const chunk of chunks) {
-        pcm.set(chunk, offset);
+        if (offset >= length) break;
+        pcm.set(chunk.subarray(0, length - offset), offset);
         offset += chunk.length;
       }
 
       model.set("sample_rate", sampleRate);
-      model.set("_pcm_b64", total ? toBase64(pcm.buffer) : "");
-      if (!total) model.set("_error", "no audio was captured");
+      model.set("_pcm_b64", length ? toBase64(pcm.buffer) : "");
+      if (!length) model.set("_error", "no audio was captured");
       model.save_changes();
-      status.textContent = "recorded " + (total / sampleRate).toFixed(2) + "s";
+      status.textContent = "recorded " + (length / sampleRate).toFixed(2) + "s";
 
-      if (total) {
+      if (length) {
         const audio = document.createElement("audio");
         audio.controls = true;
         audio.src = URL.createObjectURL(wavBlob(pcm, sampleRate));
