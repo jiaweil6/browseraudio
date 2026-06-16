@@ -4,15 +4,15 @@
 [![Python](https://img.shields.io/pypi/pyversions/browseraudio.svg)](https://pypi.org/project/browseraudio/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Microphone capture for in-browser Python** — record from the mic in
+**Audio I/O for in-browser Python** — record from the mic *and* play audio back in
 [Pyodide](https://pyodide.org), [JupyterLite](https://jupyterlite.readthedocs.io),
-and [thebe](https://github.com/jupyter-book/thebe), straight into a NumPy array.
+and [thebe](https://github.com/jupyter-book/thebe), straight to and from a NumPy array.
 
 In the browser, Python usually runs in a Web Worker with no access to
 `getUserMedia` or the Web Audio API — so the usual `sounddevice` → PortAudio
-stack can't run. `browseraudio` captures audio on the page's main thread (via a
-tiny [anywidget](https://anywidget.dev) frontend) and hands the float32 samples
-back to the kernel, so recording works even from a worker.
+stack can't run. `browseraudio` does the capture *and* playback on the page's main
+thread (via a tiny [anywidget](https://anywidget.dev) frontend) and ferries the
+float32 samples across, so it works even when the kernel runs in a worker.
 
 > **Status:** recording *and* playback. A drop-in `sounddevice`
 > replacement is on the [roadmap](#roadmap).
@@ -38,7 +38,7 @@ back to the kernel, so recording works even from a worker.
 | **Runtime** | A browser Python kernel that supports Jupyter widgets — JupyterLite, thebe-lite, classic Jupyter, or marimo. (Also works on a native kernel, but native code should just use `sounddevice`.) |
 | **Browser** | Any current Chromium, Firefox, or Safari (needs the Web Audio API + `getUserMedia`). |
 | **Context** | A **secure context** — `https://` or `http://localhost`. Browsers block microphone access on plain `http://`. |
-| **Permission** | The user must grant the microphone permission prompt, triggered by clicking the Record button. |
+| **Permission** | Recording needs the microphone-permission prompt (triggered by clicking **Record**). Playback needs no permission. |
 
 Runtime dependencies: [`anywidget`](https://anywidget.dev) and `numpy`.
 [`pyquist`](https://github.com/gclef-cmu/pyquist) is optional (only for
@@ -59,9 +59,9 @@ await micropip.install("browseraudio")
 
 ## Live demo
 
-Prefer to just try it? [`demo/index.html`](demo/) is a self-contained static
-page that runs browseraudio in the browser (record + playback) via thebe +
-JupyterLite — no install, no server. Serve it over `localhost` and open it:
+**[Try it live → jiaweil6.github.io/browseraudio](https://jiaweil6.github.io/browseraudio/)**
+— a static site that runs browseraudio's own frontend (record + playback) right in your
+browser, no install. Or serve the [`demo/`](demo/) folder locally:
 
 ```sh
 cd demo && python -m http.server 8000   # then visit http://localhost:8000
@@ -184,20 +184,23 @@ A browser tab has two Python-relevant execution contexts, and browseraudio uses
 both:
 
 1. **The page (main thread)** has the Web Audio API and `getUserMedia`, but not
-   your Python kernel. An [anywidget](https://anywidget.dev) frontend lives here
-   and does the actual capture, then encodes the float32 samples.
+   your Python kernel. An [anywidget](https://anywidget.dev) frontend lives here:
+   for recording it captures and encodes the float32 samples; for playback it
+   decodes a buffer into an `AudioContext` and plays it through the speakers.
 2. **The worker** runs your Python kernel (this is how Pyodide/JupyterLite keep
-   the page responsive), but it can't reach those audio APIs. It receives the
-   encoded samples and decodes them into a NumPy array as `rec.samples`.
+   the page responsive), but it can't reach those audio APIs. `record()` receives
+   the captured samples as `rec.samples`; `play()` ships a NumPy buffer the other
+   way for the page to sound.
 
 The two contexts talk over the **standard Jupyter widget comm channel** — the
 same mechanism any `ipywidgets` widget uses — so browseraudio works wherever
 widgets do: JupyterLite, thebe-lite, classic Jupyter, and marimo.
 
-Under the hood the frontend uses a `ScriptProcessorNode` to accumulate audio for
-`duration` seconds, base64-encodes the float32 buffer, and sends it over the
-comm; the Python side decodes it with `numpy.frombuffer`. (Both are deliberately
-simple — see the [roadmap](#roadmap) for the planned `AudioWorklet` upgrade.)
+Under the hood, audio crosses the comm as base64-encoded float32. Recording uses a
+`ScriptProcessorNode` to accumulate `duration` seconds before sending it up;
+playback hands a buffer to a one-shot `AudioBufferSourceNode`. (Both are
+deliberately simple — see the [roadmap](#roadmap) for the planned `AudioWorklet`
+upgrade.)
 
 ## Troubleshooting
 
@@ -215,23 +218,29 @@ simple — see the [roadmap](#roadmap) for the planned `AudioWorklet` upgrade.)
 ```sh
 git clone https://github.com/jiaweil6/browseraudio
 cd browseraudio
-pip install -e ".[pyquist]"     # editable install with the optional extra
-python -m build                 # build the wheel + sdist into dist/
-python -m twine check dist/*    # validate package metadata
+pip install -e ".[test,pyquist]"   # editable install with test + optional extras
+pytest                             # run the test suite
+python -m build                    # build the wheel + sdist into dist/
+python -m twine check dist/*       # validate package metadata
 ```
 
 Project layout:
 
 | Path | Purpose |
 |---|---|
-| `browseraudio/__init__.py` | Public API (`Recorder`, `record`) and version. |
+| `browseraudio/__init__.py` | Public API (`Recorder`, `record`, `Player`, `play`) and version. |
 | `browseraudio/_recorder.py` | The `Recorder` widget and `record()` (Python side). |
-| `browseraudio/static/recorder.js` | The anywidget frontend (Web Audio capture). |
+| `browseraudio/_player.py` | The `Player` widget and `play()` (Python side). |
+| `browseraudio/static/recorder.js` | Recorder frontend — Web Audio capture. |
+| `browseraudio/static/player.js` | Player frontend — Web Audio playback. |
+| `tests/` | The `pytest` suite (Python side, headless). |
+| `demo/` | Static demo site, published to [GitHub Pages](https://jiaweil6.github.io/browseraudio/). |
 | `pyproject.toml` | Packaging metadata; `static/*.js` is shipped as package data. |
 
-There is no automated test suite yet — the recording round-trip is exercised
-end-to-end (headless Chrome with a fake media stream) in the consuming project.
-Contributions, issues, and a proper test harness are welcome.
+The [`tests/`](tests) suite covers the Python side headlessly — the base64↔NumPy
+transport, array shapes, validation, and version sync — and runs in CI on every
+push and pull request across Python 3.9–3.13. (The browser frontend's Web Audio
+path isn't unit-tested yet.) Contributions and issues are welcome.
 
 ## Roadmap
 
