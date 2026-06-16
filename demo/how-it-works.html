@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How it works · browseraudio</title>
+<meta name="description" content="The architecture behind browseraudio and this demo: anywidget, the main-thread/worker bridge, the JupyterLite / Pyodide notebook stack, and how the demo runs without a kernel." />
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html">Record</a>
+      <a href="play.html">Play</a>
+      <a href="how-it-works.html" class="active">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="label">Architecture</p>
+  <h1>How it works</h1>
+  <p class="lead">
+    Two puzzles: how browseraudio moves audio between Python and the browser, and how
+    this page runs Python at all. Here's the whole stack.
+  </p>
+
+  <section>
+    <p class="label">The library · two worlds</p>
+    <h2>The page and the worker</h2>
+    <p>
+      In a browser kernel, your Python runs in a <b>Web Worker</b> — a background thread
+      with no DOM, no <code>getUserMedia</code>, and no Web Audio API. Those live only on
+      the page's <b>main thread</b>. So Python can't reach the microphone or the speakers
+      on its own.
+    </p>
+    <div class="stack">
+      <div class="layer">
+        <span class="badge">Main thread</span>
+        <span class="desc"><b>The page</b><span>DOM · Web Audio · getUserMedia · the anywidget frontend (recorder.js / player.js)</span></span>
+      </div>
+      <div class="split-note">↕  Jupyter Comm channel</div>
+      <div class="layer">
+        <span class="badge">Web Worker</span>
+        <span class="desc"><b>The kernel</b><span>CPython on WebAssembly · NumPy · your Recorder / Player object</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">The library · the bridge</p>
+    <h2>The bridge is an anywidget</h2>
+    <p>
+      browseraudio is built on <a href="https://anywidget.dev">anywidget</a>. Each widget
+      is two halves that talk over the Jupyter Comm channel:
+    </p>
+    <dl class="dl">
+      <div><dt>recorder.js<br>player.js</dt><dd>An ES module on the <b>main thread</b>. It calls <code>getUserMedia</code> / builds an <code>AudioContext</code>, and reads or writes the samples.</dd></div>
+      <div><dt>Recorder<br>Player</dt><dd>A Python <code>anywidget.AnyWidget</code> subclass in the <b>worker</b>. Its traitlets mirror state to and from the frontend.</dd></div>
+      <div><dt>_pcm_b64</dt><dd>The audio itself: float32 PCM, base64-encoded, carried as a synced trait. Recording sends it worker-ward; playback sends it page-ward.</dd></div>
+    </dl>
+    <p>
+      So <code>record()</code> captures on the page and pushes bytes <em>up</em> to Python;
+      <code>play()</code> takes an array and pushes bytes <em>down</em> to an
+      <code>AudioContext</code>. The kernel never touches an audio API — it only sets and
+      reads traits.
+    </p>
+  </section>
+
+  <section id="two-cells">
+    <p class="label">The library · timing</p>
+    <h2>Why recording needs two cells</h2>
+    <p>
+      The frontend's reply travels over the same Comm channel the kernel uses — but the
+      kernel processes comm messages <em>between</em> cell executions, not during one.
+      While the cell that calls <code>record()</code> is still running, the "here are your
+      samples" message sits unread. Display the widget in one cell, then read
+      <code>rec.samples</code> in the next, once the kernel is idle. Playback has no such
+      constraint — nothing comes back — so <code>play()</code> is single-cell.
+    </p>
+  </section>
+
+  <section>
+    <p class="label">Running it · the notebook stack</p>
+    <h2>How you'd run browseraudio for real</h2>
+    <p>
+      In day-to-day use you don't wire any of this up — you <code>pip install
+      browseraudio</code> in a browser notebook and call <code>record()</code> /
+      <code>play()</code>. That kernel is itself a stack, the Python sitting on the
+      interpreter sitting on the browser:
+    </p>
+    <div class="stack">
+      <div class="layer"><span class="badge">your code</span><span class="desc"><b>record() / play()</b><span>browseraudio's Python API, plus the anywidget halves above.</span></span></div>
+      <div class="layer"><span class="badge">JupyterLite</span><span class="desc"><b>In-browser Jupyter</b><span>The kernel protocol, the Comm channel, and piplite (the <code>%pip</code> behind installs).</span></span></div>
+      <div class="layer"><span class="badge">Pyodide</span><span class="desc"><b>CPython on WebAssembly</b><span>The interpreter, NumPy, and micropip — running in a Web Worker.</span></span></div>
+      <div class="layer"><span class="badge">the browser</span><span class="desc"><b>Main thread</b><span>Where the anywidget frontend reaches the mic and speakers.</span></span></div>
+    </div>
+    <p>
+      <a href="https://jupyterlite.readthedocs.io/">JupyterLite</a> and
+      <a href="https://thebe.readthedocs.io/">thebe</a> are the usual hosts;
+      <a href="https://pyodide.org">Pyodide</a> is the interpreter underneath both.
+    </p>
+  </section>
+
+  <section>
+    <p class="label">Running it · this demo</p>
+    <h2>How this demo runs — no kernel required</h2>
+    <p>
+      These demo pages take a shortcut. Booting a whole WebAssembly kernel just to click
+      a Record button is slow and brittle, and custom anywidget views don't reliably mount
+      in a serverless kernel. So the pages load browseraudio's <b>actual frontend
+      modules</b> directly and drive them with a tiny stand-in model:
+    </p>
+    <pre class="code"><span class="c">// demo/assets/demo.js</span>
+<span class="k">const</span> { <span class="k">default</span>: player } = <span class="k">await</span> import(<span class="s">"../vendor/browseraudio/player.js"</span>);
+player.render({ model, el });   <span class="c">// the same code a notebook runs</span></pre>
+    <p>
+      <code>recorder.js</code> and <code>player.js</code> are copied verbatim from the
+      package's <code>static/</code> folder. The only thing missing is the round-trip to a
+      real kernel; the Web Audio work is identical. So the demo boots instantly, works
+      offline, and can't break on a kernel that won't start.
+    </p>
+  </section>
+
+  <section>
+    <p class="label">Run it yourself</p>
+    <h2>Serve the folder over localhost</h2>
+    <p>Open it over <code>localhost</code> (not as a <code>file://</code> URL — microphone access needs a secure context):</p>
+    <pre class="code"><span class="k">cd</span> demo
+python3 -m http.server 8000 --bind 127.0.0.1
+<span class="c"># then visit http://127.0.0.1:8000/</span></pre>
+    <p>Any static host works for deployment (GitHub Pages, Netlify, …) as long as it's served over <code>https://</code>.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

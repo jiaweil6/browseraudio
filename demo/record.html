@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Record · browseraudio</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html" class="active">Record</a>
+      <a href="play.html">Play</a>
+      <a href="how-it-works.html">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="label">Feature · Record</p>
+  <h1>Capture the microphone</h1>
+  <p class="lead">
+    <code>record(seconds)</code> shows a button; click it, allow the mic, and the
+    samples come back to Python as a float32 NumPy array.
+  </p>
+
+  <p class="callout">
+    This page runs browseraudio's own frontend (<code>recorder.js</code>) live in your
+    browser, so the buttons really work. The Python beside each step is the exact API
+    you'd call in a notebook — <a href="how-it-works.html">see how that maps over</a>.
+  </p>
+
+  <div class="runbar">
+    <button class="run-all" id="run-all">▶ Run all</button>
+    <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
+  </div>
+
+  <div class="step-h"><span class="n">01</span><h2>Record three seconds</h2></div>
+  <p>Run the cell, click <b>● Record</b>, and allow the microphone. An inline player appears so you can hear the take.</p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="record">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">from</span> browseraudio <span class="k">import</span> record
+
+rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c"># shows a ● Record button — click it</span></code></pre>
+    <div class="cell-out" data-out="record" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">02</span><h2>Inspect the array</h2></div>
+  <p>The take is an ordinary NumPy array — float32, shape <code>(n_frames, 1)</code> — that you can slice, plot, or hand to a DSP library.</p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="inspect">▶ Run</button></div>
+<pre class="cell-code"><code>rec.samples.shape, rec.sample_rate</code></pre>
+    <div class="cell-out" data-out="inspect" hidden></div>
+  </div>
+
+  <p class="callout">
+    <b>In a notebook, this is two cells.</b> Recording finishes <em>after</em> the cell
+    that calls <code>record()</code> returns, so you read <code>rec.samples</code> in the
+    next cell — <a href="how-it-works.html#two-cells">why</a>.
+  </p>
+
+  <hr class="rule" />
+  <p>Got audio? <a href="play.html">Head to the Play page <span class="arr">→</span></a> to push a buffer back to the speakers.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+<script type="module" src="assets/demo.js"></script>
+</body>
+</html>

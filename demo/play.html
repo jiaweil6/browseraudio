@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Play · browseraudio</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html">Record</a>
+      <a href="play.html" class="active">Play</a>
+      <a href="how-it-works.html">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="label">Feature · Play</p>
+  <h1>Play a NumPy buffer</h1>
+  <p class="lead">
+    <code>play(samples, sample_rate)</code> hands a float32 array to a main-thread
+    <code>AudioContext</code>. No microphone needed — synthesize a buffer and hear it.
+  </p>
+
+  <p class="callout">
+    This page runs browseraudio's own frontend (<code>player.js</code>) live in your
+    browser. The Python beside each step is the exact API you'd call in a notebook —
+    <a href="how-it-works.html">see how that maps over</a>.
+  </p>
+
+  <div class="runbar">
+    <button class="run-all" id="run-all">▶ Run all</button>
+    <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
+  </div>
+
+  <div class="step-h"><span class="n">01</span><h2>Synthesize and play a tone</h2></div>
+  <p>A one-second 440&nbsp;Hz sine, generated and played through your speakers.</p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="play-tone">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> browseraudio <span class="k">import</span> play
+
+sr = <span class="n">44100</span>
+t = np.<span class="f">linspace</span>(<span class="n">0</span>, <span class="n">1</span>, sr, endpoint=<span class="k">False</span>)
+tone = <span class="n">0.2</span> * np.<span class="f">sin</span>(<span class="n">2</span>*np.pi*<span class="n">440</span>*t).<span class="f">astype</span>(np.float32)
+<span class="f">play</span>(tone, sr)</code></pre>
+    <div class="cell-out" data-out="play-tone" hidden></div>
+  </div>
+
+  <p class="callout">
+    Browsers block audio that starts on its own, so if it doesn't play automatically,
+    click the <b>▶ Play</b> button the widget shows.
+  </p>
+
+  <div class="step-h"><span class="n">02</span><h2>Stereo works too</h2></div>
+  <p><code>play()</code> accepts <code>(n_frames, n_channels)</code>. Here the two ears differ by 2&nbsp;Hz, so you hear a slow binaural beat.</p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="play-stereo">▶ Run</button></div>
+<pre class="cell-code"><code>left  = np.<span class="f">sin</span>(<span class="n">2</span>*np.pi*<span class="n">440</span>*t)
+right = np.<span class="f">sin</span>(<span class="n">2</span>*np.pi*<span class="n">442</span>*t)        <span class="c"># 2 Hz apart</span>
+stereo = (<span class="n">0.2</span>*np.<span class="f">stack</span>([left, right], <span class="n">1</span>)).<span class="f">astype</span>(np.float32)
+<span class="f">play</span>(stereo, sr)</code></pre>
+    <div class="cell-out" data-out="play-stereo" hidden></div>
+  </div>
+
+  <hr class="rule" />
+  <p>Want to play your own voice? <a href="record.html">Record it first <span class="arr">→</span></a>, then pass <code>rec.samples</code> to <code>play()</code>.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+<script type="module" src="assets/demo.js"></script>
+</body>
+</html>

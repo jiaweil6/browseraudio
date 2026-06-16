@@ -14,13 +14,14 @@ stack can't run. `browseraudio` captures audio on the page's main thread (via a
 tiny [anywidget](https://anywidget.dev) frontend) and hands the float32 samples
 back to the kernel, so recording works even from a worker.
 
-> **Status:** recording only — the foundation. Playback and a drop-in
-> `sounddevice` replacement are on the [roadmap](#roadmap).
+> **Status:** recording *and* playback. A drop-in `sounddevice`
+> replacement is on the [roadmap](#roadmap).
 
 ## Contents
 
 - [Requirements](#requirements)
 - [Install](#install)
+- [Live demo](#live-demo)
 - [Quickstart](#quickstart)
 - [API reference](#api-reference)
 - [How it works](#how-it-works)
@@ -56,6 +57,16 @@ import micropip
 await micropip.install("browseraudio")
 ```
 
+## Live demo
+
+Prefer to just try it? [`demo/index.html`](demo/) is a self-contained static
+page that runs browseraudio in the browser (record + playback) via thebe +
+JupyterLite — no install, no server. Serve it over `localhost` and open it:
+
+```sh
+cd demo && python -m http.server 8000   # then visit http://localhost:8000
+```
+
 ## Quickstart
 
 Recording finishes *after* you click, so display the recorder in one cell and
@@ -79,6 +90,22 @@ rec.to_pyquist()           # a pyquist.Audio, if pyquist is installed
 > the kernel doesn't process the widget's reply while that same cell is still
 > running, so the recording would never arrive.
 
+### Playback
+
+Playback is *fire-and-forget* — nothing has to return to the kernel — so it
+works in a **single cell**:
+
+```python
+from browseraudio import play
+
+play(rec.samples, rec.sample_rate)   # ▶ plays through the speakers
+play(rec.to_pyquist())               # sample_rate read from the pyquist.Audio
+```
+
+> **Autoplay.** Browsers block audio that starts without a user gesture, so
+> playback may not start on its own — just click the **▶ Play** button the
+> widget shows.
+
 ## API reference
 
 ### `record(duration=3.0)`
@@ -92,6 +119,30 @@ for the common case. Click **Record**, then read the result (see
 | `duration` | `float` | `3.0` | Length to record, in seconds. |
 
 **Returns** a `Recorder`.
+
+### `play(samples, sample_rate=None, *, autoplay=True)`
+
+Create a [`Player`](#player), display it, and return it — playing `samples`
+through the page's speakers on the browser's main thread. A drop-in shape for
+`sounddevice.play` / `pyquist.play`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `samples` | array-like | — | Audio as `(n_frames,)` or `(n_frames, n_channels)`, values in `[-1, 1]`. |
+| `sample_rate` | `int` | `None` | Sample rate in Hz. If `None`, read from `samples.sample_rate` (e.g. a `pyquist.Audio`). |
+| `autoplay` | `bool` | `True` | Try to start immediately; falls back to the **▶ Play** button if the browser blocks autoplay. |
+
+**Returns** a `Player`. **Raises** `ValueError` if `samples` isn't 1-D/2-D or no
+sample rate can be determined.
+
+### `Player`
+
+An [anywidget](https://anywidget.dev) that plays a NumPy audio buffer through
+the browser's `AudioContext` — so playback works even when the kernel runs in a
+Web Worker. Multi-channel buffers are sent channel-major; the `AudioContext`
+resamples to its own rate, so any `sample_rate` is fine. Use
+[`play()`](#playsamples-sample_rate--autoplaytrue) rather than constructing it
+directly.
 
 ### `Recorder`
 
@@ -184,11 +235,14 @@ Contributions, issues, and a proper test harness are welcome.
 
 ## Roadmap
 
-- **Playback** — push a buffer to a main-thread `AudioContext`.
+- ✅ **Playback** — push a buffer to a main-thread `AudioContext`. _(0.2.0)_
+- **`sounddevice`-compatible facade** — a `browseraudio.sounddevice` shim
+  exposing `play` / `rec` / `wait` / `query_devices` so libraries like
+  [pyquist](https://github.com/gclef-cmu/pyquist) run in the browser unchanged
+  (a real replacement, not a stub). Note the catch: `sd.rec` + `sd.wait` is
+  *blocking*, which a Web-Worker kernel can't honor in one cell — so record
+  stays two-cell (or async), while `play` is genuinely drop-in.
 - **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode`.
-- **`sounddevice`-compatible facade** — `play` / `rec` / `wait` so libraries
-  like [pyquist](https://github.com/gclef-cmu/pyquist) run in the browser
-  unchanged (a real replacement, not a stub).
 - **Binary comm transport** — send raw buffers instead of base64.
 - **Streaming** (stretch) — generator → ring buffer → AudioWorklet. Bounded by
   the browser: Python can't run in the audio thread, and `SharedArrayBuffer`

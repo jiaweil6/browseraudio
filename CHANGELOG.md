@@ -8,6 +8,21 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 _Nothing yet._
 
+## [0.2.0] — 2026-06-15
+
+### Added
+- `Player` — an [anywidget](https://anywidget.dev) that plays a NumPy audio
+  buffer through the browser's `AudioContext` on the main thread, so playback
+  works even when the kernel runs in a Web Worker (Pyodide / JupyterLite /
+  thebe-lite). Multi-channel buffers are supported (sent channel-major), and
+  the `AudioContext` resamples to its own rate, so any `sample_rate` is fine.
+- `play(samples, sample_rate=None, *, autoplay=True)` — convenience function
+  that displays a `Player` and returns it. A drop-in shape for
+  `sounddevice.play` / `pyquist.play`; reads `sample_rate` from a
+  `pyquist.Audio` when not given. Playback is fire-and-forget, so unlike
+  recording it works in a single cell. Browsers may block autoplay without a
+  user gesture; a **▶ Play** button is always available as a fallback.
+
 ## [0.1.2] — 2026-06-15
 
 ### Fixed
@@ -46,7 +61,8 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jiaweil6/browseraudio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jiaweil6/browseraudio/releases/tag/v0.1.0
