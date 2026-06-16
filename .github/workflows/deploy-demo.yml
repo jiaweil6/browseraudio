@@ -1,0 +1,41 @@
+name: deploy demo
+
+# Publish the demo/ folder to GitHub Pages whenever it changes on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - ".github/workflows/deploy-demo.yml"
+  workflow_dispatch:        # also runnable by hand from the Actions tab
+
+# Permissions the Pages deploy needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; newer pushes cancel in-flight ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload the demo/ folder as the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo          # demo/ becomes the site root → clean URLs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
