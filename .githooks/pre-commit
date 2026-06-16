@@ -1,0 +1,10 @@
+#!/bin/sh
+# Block the commit unless the test suite passes.
+# Enable once per clone with:  git config core.hooksPath .githooks
+# Bypass a single commit with:  git commit --no-verify
+echo "pre-commit: running tests…"
+if ! python -m pytest -q; then
+  echo
+  echo "✗ tests failed — commit aborted (bypass with: git commit --no-verify)"
+  exit 1
+fi

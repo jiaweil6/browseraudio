@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>browseraudio — audio I/O for in-browser Python</title>
+<meta name="description" content="Record the mic and play audio back from Python running in the browser — Pyodide, JupyterLite, thebe — straight to and from NumPy." />
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html">Record</a>
+      <a href="play.html">Play</a>
+      <a href="how-it-works.html">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <header class="hero">
+    <h1>Audio I/O for Python,<br>running in the browser.</h1>
+    <p class="lead">
+      Record the microphone and play audio back from Python inside the browser —
+      Pyodide, JupyterLite, thebe — straight to and from a NumPy array. No native
+      PortAudio, no server.
+    </p>
+    <div class="cta">
+      <a href="record.html">Try recording <span class="arr">→</span></a>
+      <a class="secondary" href="how-it-works.html">How it's built <span class="arr">→</span></a>
+    </div>
+  </header>
+
+  <section>
+    <p class="label">Features</p>
+    <div class="index">
+      <a class="row" href="record.html">
+        <span class="num">01</span><span class="name">Record</span>
+        <span class="desc">Capture mic input to a float32 NumPy array.</span>
+        <span class="arr">→</span>
+      </a>
+      <a class="row" href="play.html">
+        <span class="num">02</span><span class="name">Play</span>
+        <span class="desc">Push any NumPy buffer to the speakers.</span>
+        <span class="arr">→</span>
+      </a>
+      <div class="row soon">
+        <span class="num">03</span><span class="name">Devices &amp; streams</span>
+        <span class="desc">A <code>sounddevice</code>-shaped facade: <code>query_devices</code>, blocking <code>play</code>/<code>rec</code>, streaming.</span>
+        <span class="tag">roadmap</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Why it exists</p>
+    <h2>Python can't reach the speakers, so it asks the page</h2>
+    <p>
+      In the browser, Python usually runs in a Web Worker with no access to
+      <code>getUserMedia</code> or the Web Audio API — so the usual
+      <code>sounddevice</code> → PortAudio stack can't run. browseraudio does the
+      capture and playback on the page's main thread, through a small
+      <a href="https://anywidget.dev">anywidget</a> frontend, and ships the samples
+      across to the kernel.
+    </p>
+    <p><a href="how-it-works.html">Read the architecture <span class="arr">→</span></a></p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

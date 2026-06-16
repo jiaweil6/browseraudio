@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browseraudio"
-version = "0.1.2"
-description = "Microphone capture for in-browser Python (Pyodide / JupyterLite) via the Web Audio API."
+version = "0.2.0"
+description = "Microphone capture and playback for in-browser Python (Pyodide / JupyterLite) via the Web Audio API."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -32,9 +32,13 @@ Issues = "https://github.com/jiaweil6/browseraudio/issues"
 
 [project.optional-dependencies]
 pyquist = ["pyquist"]
+test = ["pytest>=7"]
 
 [tool.setuptools]
 packages = ["browseraudio"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools.package-data]
 browseraudio = ["static/*.js"]
