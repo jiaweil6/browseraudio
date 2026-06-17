@@ -8,7 +8,7 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 _Nothing yet._
 
-## [0.2.0] — 2026-06-15
+## [0.2.0] — 2026-06-17
 
 ### Added
 - `Player` — an [anywidget](https://anywidget.dev) that plays a NumPy audio
