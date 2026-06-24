@@ -8,6 +8,23 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 _Nothing yet._
 
+## [0.3.0] — 2026-06-24
+
+### Added
+- `browseraudio.sounddevice` — a [`sounddevice`](https://python-sounddevice.readthedocs.io)-shaped
+  facade (`play`, `wait`, `query_devices`, `default`) so libraries can fall back
+  to it in the browser. Playback is genuinely drop-in; `rec` raises with
+  guidance toward the two-cell `record()` flow, since a browser kernel can't
+  fill a capture buffer synchronously (the AudioContext picks the rate, and a
+  Web-Worker kernel can't process the comm reply mid-cell).
+- `Recorder.on_result(cb)` / `Recorder.on_error(cb)` — public hooks to react to
+  a completed (or failed) capture without observing the internal `_pcm_b64` /
+  `_error` traits.
+- `Recorder.result()` — an awaitable that resolves with the recorder once
+  capture completes (main-thread kernels only); it detects Web-Worker kernels
+  and raises immediately instead of hanging.
+- `browseraudio._env` — `in_browser()` / `in_worker()` runtime detection.
+
 ## [0.2.0] — 2026-06-17
 
 ### Added
@@ -61,7 +78,8 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jiaweil6/browseraudio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jiaweil6/browseraudio/compare/v0.1.0...v0.1.1

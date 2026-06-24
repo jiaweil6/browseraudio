@@ -14,8 +14,8 @@ stack can't run. `browseraudio` does the capture *and* playback on the page's ma
 thread (via a tiny [anywidget](https://anywidget.dev) frontend) and ferries the
 float32 samples across, so it works even when the kernel runs in a worker.
 
-> **Status:** recording *and* playback. A drop-in `sounddevice`
-> replacement is on the [roadmap](#roadmap).
+> **Status:** recording, playback, and a `sounddevice`-compatible facade
+> (`browseraudio.sounddevice`). See the [roadmap](#roadmap) for what's next.
 
 ## Contents
 
@@ -177,6 +177,29 @@ rec                        # display it; click Record
 | Method | Returns | Description |
 |---|---|---|
 | `to_pyquist()` | `pyquist.Audio` | The take as a `pyquist.Audio`. Raises `RuntimeError` if nothing has been recorded, and `ImportError` if `pyquist` isn't installed. |
+| `on_result(cb)` | handler | Register `cb(recorder)` to run when a capture arrives — a public alternative to observing the internal `_pcm_b64` trait. |
+| `on_error(cb)` | handler | Register `cb(message)` to run when a capture attempt fails. |
+| `await result()` | `Recorder` | Awaitable that resolves with the recorder once capture completes (raising on failure). **Main-thread kernels only** — in a Web-Worker kernel it raises immediately rather than hanging; use the two-cell flow there. |
+
+### `browseraudio.sounddevice`
+
+A [`sounddevice`](https://python-sounddevice.readthedocs.io)-shaped facade, so a
+library can fall back to it in the browser without code changes:
+
+```python
+try:
+    import sounddevice as sd
+except (OSError, ModuleNotFoundError):
+    import browseraudio.sounddevice as sd
+```
+
+| Name | Status | Notes |
+|---|---|---|
+| `play(data, samplerate=None, **kw)` | drop-in | Delegates to [`play()`](#playsamples-sample_rate--autoplaytrue); fire-and-forget, single cell. |
+| `wait(ignore_errors=True)` | drop-in | No-op — browser playback doesn't block. |
+| `query_devices(device=None, kind=None)` | drop-in | A synthetic two-device table (browser mic + speakers). |
+| `default` | drop-in | Mimics `sd.default`; its `device` slot is indexable and assignable. |
+| `rec(...)` | **not supported** | Raises with guidance toward the two-cell [`record()`](#record-duration30): the browser picks the sample rate and can't fill a buffer synchronously in one cell. |
 
 ## How it works
 
@@ -210,7 +233,7 @@ upgrade.)
 | **Permission denied / no prompt** | The mic needs a **secure context** (`https://` or `localhost`) and a user gesture. Click the button; if you previously blocked the mic, re-allow it in the browser's site settings. |
 | **`rec.samples` is `None`** | You haven't recorded yet, or you read it in the *same* cell that created the recorder. Click **Record**, then read it in a **new** cell. |
 | **Recorded, but silent** | Check `rec.error`, and that the right input device is selected and unmuted at the OS/browser level. |
-| **`await record()` hangs** | Not supported — the kernel can't process the widget reply mid-cell. Use the two-cell flow. |
+| **`await record()` hangs** | In a Web-Worker kernel (JupyterLite / thebe) the kernel can't process the widget reply mid-cell — use the two-cell flow. On the page's main thread, `await rec.result()` works in one cell. |
 | **`to_pyquist()` raises `ImportError`** | Install pyquist (`pip install pyquist`), or use `rec.samples` / `rec.sample_rate` directly. |
 
 ## Development
@@ -245,12 +268,13 @@ path isn't unit-tested yet.) Contributions and issues are welcome.
 ## Roadmap
 
 - ✅ **Playback** — push a buffer to a main-thread `AudioContext`. _(0.2.0)_
-- **`sounddevice`-compatible facade** — a `browseraudio.sounddevice` shim
-  exposing `play` / `rec` / `wait` / `query_devices` so libraries like
-  [pyquist](https://github.com/gclef-cmu/pyquist) run in the browser unchanged
-  (a real replacement, not a stub). Note the catch: `sd.rec` + `sd.wait` is
-  *blocking*, which a Web-Worker kernel can't honor in one cell — so record
-  stays two-cell (or async), while `play` is genuinely drop-in.
+- ✅ **`sounddevice`-compatible facade** — `browseraudio.sounddevice` exposes
+  `play` / `wait` / `query_devices` / `default` so libraries like
+  [pyquist](https://github.com/gclef-cmu/pyquist) can fall back to it in the
+  browser. `play` is genuinely drop-in; the catch is `sd.rec` + `sd.wait`, which
+  is *blocking* — a Web-Worker kernel can't honor that in one cell, so `rec`
+  raises with guidance toward the two-cell `record()` flow (and
+  `Recorder.result()` offers an `await` path on the main thread). _(Unreleased)_
 - **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode`.
 - **Binary comm transport** — send raw buffers instead of base64.
 - **Streaming** (stretch) — generator → ring buffer → AudioWorklet. Bounded by

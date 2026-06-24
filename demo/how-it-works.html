@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>How it works · browseraudio</title>
-<meta name="description" content="The architecture behind browseraudio and this demo: anywidget, the main-thread/worker bridge, the JupyterLite / Pyodide notebook stack, and how the demo runs without a kernel." />
+<meta name="description" content="The architecture behind browseraudio: anywidget, the main-thread/worker bridge, the sounddevice facade, the JupyterLite / Pyodide notebook stack, and how the demo runs the real thebe + Pyodide kernel in the browser." />
 <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
@@ -84,6 +84,37 @@
     </p>
   </section>
 
+  <section id="facade">
+    <p class="label">The library · drop-in</p>
+    <h2>The sounddevice facade</h2>
+    <p>
+      Plenty of audio code already speaks
+      <a href="https://python-sounddevice.readthedocs.io"><code>sounddevice</code></a>. So
+      browseraudio ships <code>browseraudio.sounddevice</code> — a shim with the same shape
+      (<code>play</code>, <code>wait</code>, <code>query_devices</code>, <code>default</code>),
+      backed by the page/worker bridge above. A library can fall back to it in the browser and
+      keep running unchanged:
+    </p>
+    <pre class="code"><span class="k">try</span>:
+    <span class="k">import</span> sounddevice <span class="k">as</span> sd
+<span class="k">except</span> (OSError, ModuleNotFoundError):
+    <span class="k">import</span> browseraudio.sounddevice <span class="k">as</span> sd   <span class="c"># same calls, Web Audio underneath</span></pre>
+    <p>
+      <code>play</code> is genuinely drop-in — it's fire-and-forget, so a single call works.
+      <code>rec</code> is the catch: <code>sd.rec()</code> + <code>sd.wait()</code> is
+      <em>blocking</em>, but the browser can't fill a buffer synchronously — the
+      <code>AudioContext</code> picks the rate, and a worker kernel can't process the reply
+      mid-cell (the <a href="#two-cells">two-cells</a> problem). So the facade's <code>rec</code>
+      raises with a pointer to the two-cell <code>record()</code> flow instead of hanging.
+    </p>
+    <p>
+      On the page's <b>main thread</b> — a bare Pyodide REPL, where the event loop <em>can</em>
+      service the reply — you can also <code>await rec.result()</code> to get a take in one go. In
+      a Web-Worker kernel that would hang, so <code>result()</code> detects the worker and raises
+      immediately rather than leaving you stuck.
+    </p>
+  </section>
+
   <section>
     <p class="label">Running it · the notebook stack</p>
     <h2>How you'd run browseraudio for real</h2>
@@ -108,21 +139,22 @@
 
   <section>
     <p class="label">Running it · this demo</p>
-    <h2>How this demo runs — no kernel required</h2>
+    <h2>How this demo runs — on the real stack</h2>
     <p>
-      These demo pages take a shortcut. Booting a whole WebAssembly kernel just to click
-      a Record button is slow and brittle, and custom anywidget views don't reliably mount
-      in a serverless kernel. So the pages load browseraudio's <b>actual frontend
-      modules</b> directly and drive them with a tiny stand-in model:
+      Both interactive pages run the <b>real</b> stack above — thebe + thebe-lite + Pyodide,
+      vendored under <code>vendor/thebe-dist/</code> — rather than faking it. On the first
+      <b>Run</b>, <code>assets/live.js</code> boots the kernel and <code>micropip</code>-installs
+      the actual <code>browseraudio</code> package, so the cells run the genuine API:
+      <code>record()</code> mounts the real <code>Recorder</code> anywidget, and
+      <code>play()</code> the real <code>Player</code> — exactly what you'd get in a notebook.
     </p>
-    <pre class="code"><span class="c">// demo/assets/demo.js</span>
-<span class="k">const</span> { <span class="k">default</span>: player } = <span class="k">await</span> import(<span class="s">"../vendor/browseraudio/player.js"</span>);
-player.render({ model, el });   <span class="c">// the same code a notebook runs</span></pre>
+    <pre class="code"><span class="c">// assets/live.js — on first Run</span>
+<span class="k">await</span> loadScript(<span class="s">"vendor/thebe-dist/lite/thebe-lite.min.js"</span>);   <span class="c">// + Pyodide</span>
+<span class="k">await</span> kernel.requestExecute({ code: <span class="s">'await micropip.install("browseraudio")'</span> });</pre>
     <p>
-      <code>recorder.js</code> and <code>player.js</code> are copied verbatim from the
-      package's <code>static/</code> folder. The only thing missing is the round-trip to a
-      real kernel; the Web Audio work is identical. So the demo boots instantly, works
-      offline, and can't break on a kernel that won't start.
+      The runtime is a one-time ~25 MB download (cached after); reload the page to reset to a
+      clean kernel. The cells are editable — change the code and re-run. (The CodeMirror
+      editors are styled to match the static blocks via <code>assets/live.css</code>.)
     </p>
   </section>
 

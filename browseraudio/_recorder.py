@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import base64
 import pathlib
-from typing import Optional
+from typing import Callable, Optional
 
 import anywidget
 import numpy as np
 import traitlets
+
+from ._env import in_worker
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -68,6 +70,81 @@ class Recorder(anywidget.AnyWidget):
     def samples(self) -> Optional[np.ndarray]:
         """The most recent recording as float32 ``(n_frames, 1)``, or ``None``."""
         return self._samples
+
+    def on_result(self, callback: Callable[["Recorder"], None]) -> Callable:
+        """Run ``callback(self)`` when a recording arrives from the browser.
+
+        A clean, public alternative to observing the internal ``_pcm_b64``
+        trait: the callback fires once samples have been captured (i.e. after
+        the user clicks **Record** and the audio crosses the comm), with this
+        :class:`Recorder` so you can read ``.samples`` / ``.sample_rate`` /
+        ``.to_pyquist()``. Returns the underlying handler so you can later pass
+        it to :meth:`unobserve` if you need to detach.
+        """
+
+        def _handler(change) -> None:
+            # ``_on_pcm`` is registered first (in __init__), so by the time this
+            # runs ``self._samples`` already reflects the new capture.
+            if self._samples is not None:
+                callback(self)
+
+        self.observe(_handler, names="_pcm_b64")
+        return _handler
+
+    def on_error(self, callback: Callable[[str], None]) -> Callable:
+        """Run ``callback(message)`` when a recording attempt fails.
+
+        Surfaces the same failures as the :attr:`error` attribute (permission
+        denied, no input device, nothing captured, …) as they happen, instead
+        of being silently dropped. Returns the underlying handler for
+        :meth:`unobserve`.
+        """
+
+        def _handler(change) -> None:
+            if change["new"]:
+                callback(change["new"])
+
+        self.observe(_handler, names="_error")
+        return _handler
+
+    async def result(self) -> "Recorder":
+        """Await the next completed recording, then return this recorder.
+
+        Resolves once samples arrive (read them via ``.samples`` /
+        ``.to_pyquist()``), or raises :class:`RuntimeError` if the attempt
+        fails. **Main-thread only:** in a Web-Worker kernel (JupyterLite /
+        thebe) the comm reply can't be processed while this coroutine's cell is
+        still running, so awaiting would hang forever — we detect that and raise
+        immediately, pointing you at the two-cell flow instead.
+        """
+        if in_worker():
+            raise RuntimeError(
+                "await result() can't complete in a Web-Worker kernel "
+                "(JupyterLite / thebe): the widget reply isn't processed while "
+                "the cell is still running. Use the two-cell flow instead — "
+                "display the recorder, click Record, then read .samples in a "
+                "later cell."
+            )
+
+        import asyncio
+
+        future: "asyncio.Future[Recorder]" = asyncio.get_running_loop().create_future()
+
+        def _resolved(change) -> None:
+            if self._samples is not None and not future.done():
+                future.set_result(self)
+
+        def _failed(change) -> None:
+            if change["new"] and not future.done():
+                future.set_exception(RuntimeError(change["new"]))
+
+        self.observe(_resolved, names="_pcm_b64")
+        self.observe(_failed, names="_error")
+        try:
+            return await future
+        finally:
+            self.unobserve(_resolved, names="_pcm_b64")
+            self.unobserve(_failed, names="_error")
 
     def to_pyquist(self):
         """Return the recording as a :class:`pyquist.Audio` (requires pyquist)."""

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Record · browseraudio</title>
 <link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/live.css" />
 </head>
 <body>
 
@@ -29,9 +30,11 @@
   </p>
 
   <p class="callout">
-    This page runs browseraudio's own frontend (<code>recorder.js</code>) live in your
-    browser, so the buttons really work. The Python beside each step is the exact API
-    you'd call in a notebook — <a href="how-it-works.html">see how that maps over</a>.
+    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) and
+    <code>micropip</code>-installs the actual <code>browseraudio</code> package — so the
+    cells below are the genuine API, not a mock, just like
+    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the
+    first <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
   </p>
 
   <div class="runbar">
@@ -74,6 +77,6 @@ rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c
   </div>
 </footer>
 
-<script type="module" src="assets/demo.js"></script>
+<script src="assets/live.js"></script>
 </body>
 </html>

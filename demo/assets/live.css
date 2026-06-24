@@ -1,0 +1,51 @@
+/* live.css — make thebe's CodeMirror editors and output look like the demo's
+   static cells. Loaded only by record.html (the live-kernel page). The styling
+   activates under body.live-active so an unmounted page is unaffected. */
+
+/* The editor replaces <pre class="cell-code">; match that block exactly:
+   same mono font/size/leading, same padding, same surface, no chrome. */
+.live-active .cell .CodeMirror {
+  height: auto;
+  background: var(--surface);
+  color: var(--ink);
+  font: 0.875rem/1.7 var(--mono);
+  padding: var(--s4);
+}
+.live-active .cell .CodeMirror-scroll { min-height: 0; overflow-x: auto; }
+.live-active .cell .CodeMirror-lines { padding: 0; }
+.live-active .cell .CodeMirror pre.CodeMirror-line,
+.live-active .cell .CodeMirror pre.CodeMirror-line-like { padding: 0; }
+
+/* No line-number gutter — the static blocks had none. */
+.live-active .cell .CodeMirror-gutters { display: none; border: 0; background: transparent; }
+.live-active .cell .CodeMirror-sizer { margin-left: 0 !important; }
+
+/* Cursor + selection in the site's palette. */
+.live-active .cell .CodeMirror-cursor { border-left-color: var(--ink); }
+.live-active .cell .CodeMirror-selected { background: var(--accent-tint); }
+.live-active .cell .CodeMirror-focused .CodeMirror-selected { background: var(--accent-tint); }
+
+/* Syntax tokens — mirror the hand-tagged static highlight (.k/.s/.c/.n/.f). */
+.live-active .cell .cm-keyword { color: var(--accent); }
+.live-active .cell .cm-builtin { color: var(--accent); }
+.live-active .cell .cm-string { color: var(--ink-soft); }
+.live-active .cell .cm-comment { color: var(--muted); }
+.live-active .cell .cm-number { color: var(--ink-soft); }
+.live-active .cell .cm-def,
+.live-active .cell .cm-variable,
+.live-active .cell .cm-property,
+.live-active .cell .cm-operator { color: var(--ink); }
+
+/* thebe's output area, relocated into .cell-out: strip Jupyter's default
+   margins/fonts so text results read like the demo's .result blocks. The
+   widget button + <audio> already inherit .cell-out styling from style.css. */
+.cell-out .jp-OutputArea,
+.cell-out .jp-OutputArea-child,
+.cell-out .jp-OutputArea-output { margin: 0; padding: 0; background: none; }
+.cell-out .jp-OutputArea pre {
+  margin: 0; font: 0.85rem/1.6 var(--mono); white-space: pre-wrap; color: var(--ink);
+}
+/* Tracebacks / stderr stand out without shouting. */
+.cell-out .jp-OutputArea [data-mime-type="application/vnd.jupyter.stderr"] {
+  color: #b4452f; white-space: pre-wrap;
+}

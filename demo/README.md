@@ -12,29 +12,39 @@ One page per capability, so the site grows cleanly as more of the
 | Page | What it shows |
 |---|---|
 | `index.html` | Landing — overview and links. |
-| `record.html` | `record()` — capture the mic to a NumPy array. |
+| `record.html` | `record()` — captures the mic to a NumPy array. |
 | `play.html` | `play()` — push a NumPy buffer to the speakers (tone + stereo). |
-| `how-it-works.html` | The architecture: the anywidget bridge, the real notebook stack (JupyterLite / Pyodide), and how this demo runs without a kernel. |
+| `how-it-works.html` | The architecture: the anywidget bridge, the `sounddevice` facade, the real notebook stack (JupyterLite / Pyodide), and how the demo runs the real kernel. |
+
+Both interactive pages (`record.html`, `play.html`) boot a **real** in-browser Python
+kernel (thebe + Pyodide) and run the actual `browseraudio` package, just like
+JupyterLite / thebe.
 
 ```
 demo/
 ├── index.html  record.html  play.html  how-it-works.html
+├── service-worker.js    # pyodide kernel's contents SW (root scope) — for Record
+├── vendor-thebe.sh      # fetches the live-code runtime below
 ├── assets/
-│   ├── style.css     # shared design system (light + dark)
-│   └── demo.js       # drives the library's frontend modules in-page
+│   ├── style.css        # shared design system (light + dark)
+│   ├── live.js          # boots the real thebe + Pyodide kernel; runs the cells
+│   └── live.css         # styles thebe's CodeMirror editors to match the cells
 └── vendor/
-    └── browseraudio/ # recorder.js + player.js, copied from the package
+    └── thebe-dist/      # thebe 0.9.3 (core/) + thebe-lite 0.5.0 (lite/), from npm
 ```
 
 ## How the interactive cells work
 
-The demo doesn't run a Python kernel. Instead it loads browseraudio's **own
-frontend modules** — `recorder.js` and `player.js`, copied verbatim from the
-package's `static/` folder — and drives them with a tiny stand-in widget model
-(`demo.js`). That's the same Web Audio code a real notebook runs; only the
-round-trip to a Python kernel is omitted. The Python shown beside each cell is the
-exact API you'd call in [JupyterLite](https://jupyterlite.readthedocs.io/) or
-[thebe](https://thebe.readthedocs.io/). See `how-it-works.html` for the full story.
+`assets/live.js` boots a **real** in-browser Python kernel — thebe + thebe-lite +
+Pyodide (vendored under `vendor/thebe-dist/`) — and `micropip`-installs the actual
+`browseraudio` package from PyPI on the first Run. So `record(3.0)` runs the genuine
+`Recorder` anywidget and `play(...)` the genuine `Player`, exactly as they would in
+[JupyterLite](https://jupyterlite.readthedocs.io/) or
+[thebe](https://thebe.readthedocs.io/). The runtime is a one-time ~25 MB download;
+reload the page to reset. The cells are editable CodeMirror, styled to match via
+`assets/live.css`.
+
+See `how-it-works.html` for the full architecture.
 
 ## Run it locally
 
@@ -52,12 +62,15 @@ python3 -m http.server 8000
 Any static host works (GitHub Pages, Netlify, S3, …) as long as it serves over
 `https://`. Publish the whole `demo/` folder — everything is self-contained.
 
-## Keeping the vendored frontend in sync
+## Keeping the vendored runtime in sync
 
-`vendor/browseraudio/*.js` are copies of the package's frontend. Refresh them if
-the library's `static/` changes:
+The demo runs the genuine package by `micropip`-installing `browseraudio` from PyPI
+into the kernel, so there's no frontend copy to keep in sync — just the live-code
+runtime under `vendor/thebe-dist/` (plus root `service-worker.js`), fetched by
+`vendor-thebe.sh`. Run it once to populate, or to bump the pinned thebe / thebe-lite
+versions:
 
 ```sh
-cp ../browseraudio/static/recorder.js vendor/browseraudio/recorder.js
-cp ../browseraudio/static/player.js   vendor/browseraudio/player.js
+./vendor-thebe.sh                       # idempotent; skips if already vendored
+rm -rf vendor/thebe-dist && ./vendor-thebe.sh   # force a refetch
 ```
