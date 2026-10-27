@@ -16,6 +16,7 @@
       <a href="record.html">Record</a>
       <a href="play.html">Play</a>
       <a href="synth.html">Synth</a>
+      <a href="realtime.html">Real-time</a>
       <a href="how-it-works.html">How it works</a>
       <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
     </div>
@@ -54,14 +55,19 @@
         <span class="desc">Design a sound in NumPy, then play it live with your computer keyboard.</span>
         <span class="arr">→</span>
       </a>
+      <a class="row" href="realtime.html">
+        <span class="num">04</span><span class="name">Real-time</span>
+        <span class="desc">A NumPy callback fills each block as the browser plays it — steer it live from the keyboard or any widget.</span>
+        <span class="arr">→</span>
+      </a>
       <a class="row" href="how-it-works.html#facade">
-        <span class="num">04</span><span class="name">sounddevice facade</span>
-        <span class="desc">Drop-in <code>browseraudio.sounddevice</code>: <code>query_devices</code>, <code>default</code>, single-cell <code>play</code>, and a <code>rec</code> that guides you to the two-cell flow.</span>
+        <span class="num">05</span><span class="name">sounddevice facade</span>
+        <span class="desc">Drop-in <code>browseraudio.sounddevice</code>: <code>query_devices</code>, <code>default</code>, single-cell <code>play</code>, a real-time <code>OutputStream</code>, and a <code>rec</code> that guides you to the two-cell flow.</span>
         <span class="arr">→</span>
       </a>
       <div class="row soon">
-        <span class="num">05</span><span class="name">Streaming</span>
-        <span class="desc">Generator → ring buffer → AudioWorklet.</span>
+        <span class="num">06</span><span class="name">Piano-Genie mappings</span>
+        <span class="desc">Context-dependent key → note tables, written in Python.</span>
         <span class="tag">roadmap</span>
       </div>
     </div>

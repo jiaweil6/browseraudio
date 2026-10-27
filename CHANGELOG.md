@@ -27,7 +27,9 @@ All notable changes to **browseraudio** are documented here. The format follows
   `render()`.
 - `KeyMap` — computer-key → MIDI mapping as a small state machine (musical
   typing by default, with octave keys; context-dependent mappings fit too).
-- `demo/synth.html`.
+- Demo pages `synth.html` (the keyboard synth) and `realtime.html` (a block
+  callback run live: state between blocks, block size vs. latency, a wavetable
+  synth, and a sounddevice `OutputStream` steered by a slider).
 
 ### Changed
 - `sounddevice.query_devices` resolves `(input, output)` pairs with `kind=`,
