@@ -189,6 +189,14 @@ function render({ model, el }) {
     });
   });
 
+  // The worklet and AudioContext are built for one block size / channel count
+  // / rate; a change mid-stream needs a fresh start.
+  model.on("change:block_size change:channels change:sample_rate", () => {
+    if (!running) return;
+    stop();
+    errorBox.textContent = "settings changed — press ▶ Start again";
+  });
+
   model.on("change:error", () => {
     const err = model.get("error");
     errorBox.textContent = err;
