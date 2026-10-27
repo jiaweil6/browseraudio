@@ -18,9 +18,10 @@ def _decode(b64: str) -> np.ndarray:
 
 
 def _capture(s: Stream) -> list:
-    """Collect what the widget would send to the browser."""
+    """Start `s` and collect what the widget would send to the browser."""
     sent: list = []
     s.send = sent.append
+    s.start()
     return sent
 
 
@@ -148,11 +149,13 @@ def test_wrong_shape_stops_the_stream_until_restart():
     assert sent == []
     assert "shape" in s.error
 
+    assert not s.playing  # an error stops the stream
+
     s.callback = lambda block: None
     _msg(s, type="need", n=1, id=1)
     assert sent == []  # still stopped
-    _msg(s, type="start")
-    assert s.error == ""
+    s.start()
+    assert s.error == "" and s.playing
     _msg(s, type="need", n=1, id=2)
     assert len(sent) == 1
 
@@ -200,8 +203,34 @@ def test_on_note_exception_is_reported():
         raise KeyError(midi)
 
     s = Stream(lambda block: None, SR, 4, on_note=bad)
+    s.start()
     _msg(s, type="note", midi=60, on=1)
     assert s.error.startswith("on_note: KeyError")
+    assert not s.playing
+
+
+def test_start_and_stop_drive_playing():
+    s = Stream(lambda block: None, SR, 4)
+    assert not s.playing
+    s.start()
+    assert s.playing
+    s.stop()
+    assert not s.playing
+
+
+def test_no_blocks_while_stopped():
+    s = Stream(lambda block: None, SR, 4)
+    sent: list = []
+    s.send = sent.append
+    _msg(s, type="need", n=2, id=0)  # e.g. a request still in flight at Stop
+    assert sent == [] and s.blocks_rendered == 0
+
+
+def test_need_reports_dropouts():
+    s = Stream(lambda block: None, SR, 4)
+    _capture(s)
+    _msg(s, type="need", n=1, id=0, dropouts=3)
+    assert s.dropouts == 3
 
 
 def test_start_resets_counters():
@@ -210,4 +239,4 @@ def test_start_resets_counters():
     _msg(s, type="need", n=2, id=0)
     assert s.blocks_rendered == 2
     _msg(s, type="start")
-    assert s.blocks_rendered == 0 and s.busy == 0.0
+    assert s.blocks_rendered == 0 and s.busy == 0.0 and s.dropouts == 0

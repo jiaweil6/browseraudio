@@ -87,24 +87,47 @@ function render({ model, el }) {
   let load = null; // smoothed callback time / real time of the audio it made
   let dropouts = 0;
 
-  const keys = createKeys(model, el, {
-    onNoteOn: (midi) => {
-      model.send({ type: "note", midi, on: 1 });
-      return midi;
-    },
-    onNoteOff: (midi) => model.send({ type: "note", midi, on: 0 }),
-  });
+  // The panel: with the computer-keyboard control surface, or (for a plain
+  // sounddevice-style OutputStream) just the transport and stats.
+  let keys = null;
+  let root;
+  if (model.get("keyboard")) {
+    keys = createKeys(model, el, {
+      onNoteOn: (midi) => {
+        model.send({ type: "note", midi, on: 1 });
+        return midi;
+      },
+      onNoteOff: (midi) => model.send({ type: "note", midi, on: 0 }),
+    });
+    root = keys.root;
+  } else {
+    const style = document.createElement("style");
+    style.textContent = KEYS_STYLE;
+    root = document.createElement("div");
+    root.className = "ba-kb";
+    el.append(style, root);
+  }
   const bar = document.createElement("div");
   bar.className = "ba-kb-bar";
   const button = document.createElement("button");
   button.className = "jupyter-button";
+  // Shown when the browser's autoplay policy kept the AudioContext suspended
+  // (a stream started from Python, with no click on the page to allow it).
+  const unmute = document.createElement("button");
+  unmute.className = "jupyter-button";
+  unmute.textContent = "🔈 Click to enable audio";
+  unmute.style.display = "none"; // (not `hidden`: .jupyter-button sets display)
   const stats = document.createElement("span");
   stats.className = "ba-kb-stats";
-  bar.append(button, stats);
+  bar.append(button, unmute, stats);
   const errorBox = document.createElement("div");
   errorBox.className = "ba-kb-error";
-  keys.root.insertBefore(bar, keys.keysRow);
-  keys.root.insertBefore(errorBox, keys.keysRow);
+  if (keys) {
+    root.insertBefore(bar, keys.keysRow);
+    root.insertBefore(errorBox, keys.keysRow);
+  } else {
+    root.append(bar, errorBox);
+  }
 
   const smooth = (prev, x) => (prev === null ? x : 0.8 * prev + 0.2 * x);
 
@@ -121,7 +144,7 @@ function render({ model, el }) {
     const id = nextId++;
     sentAt.set(id, performance.now());
     inflight += want;
-    model.send({ type: "need", n: want, id });
+    model.send({ type: "need", n: want, id, dropouts });
   }
 
   model.on("msg:custom", (msg) => {
@@ -136,11 +159,21 @@ function render({ model, el }) {
     request();
   });
 
+  const showUnmute = () => {
+    unmute.style.display = running && ctx && ctx.state === "suspended" ? "" : "none";
+  };
+  unmute.addEventListener("click", () => {
+    if (ctx) ctx.resume();
+  });
+
   async function start() {
     const sr = model.get("sample_rate");
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    // Created inside the click handler, so the autoplay policy lets it run.
+    // From the Start button this runs inside the click, so autoplay allows it;
+    // started from Python it may come up suspended (see `unmute`).
     ctx = new AudioCtx({ sampleRate: sr, latencyHint: "interactive" });
+    ctx.onstatechange = showUnmute;
+    if (ctx.state !== "running") ctx.resume().catch(() => {});
     running = true;
     queued = inflight = dropouts = 0;
     rtt = load = null;
@@ -168,6 +201,7 @@ function render({ model, el }) {
       if (e.data.dropouts) dropouts = e.data.dropouts;
     };
     node.connect(ctx.destination);
+    showUnmute();
     request();
   }
 
@@ -177,30 +211,45 @@ function render({ model, el }) {
     if (node) node.disconnect();
     if (ctx) ctx.close();
     node = ctx = null;
+    showUnmute();
     model.send({ type: "stop" });
   }
 
-  button.textContent = "▶ Start";
-  button.addEventListener("click", () => {
-    if (running) return stop();
-    start().catch((err) => {
+  // `playing` is the single source of truth, set from either side: the
+  // Start/Stop button here, or start()/stop() in Python.
+  function setPlaying(value) {
+    if (model.get("playing") === value) return;
+    model.set("playing", value);
+    model.save_changes();
+  }
+
+  function sync() {
+    const want = model.get("playing");
+    if (want && !running) {
+      start().catch((err) => {
+        stop();
+        setPlaying(false);
+        errorBox.textContent = "couldn't start audio: " + err;
+      });
+    } else if (!want && running) {
       stop();
-      errorBox.textContent = "couldn't start audio: " + err;
-    });
-  });
+    }
+  }
+  model.on("change:playing", sync);
+
+  button.textContent = "▶ Start";
+  button.addEventListener("click", () => setPlaying(!model.get("playing")));
 
   // The worklet and AudioContext are built for one block size / channel count
   // / rate; a change mid-stream needs a fresh start.
   model.on("change:block_size change:channels change:sample_rate", () => {
     if (!running) return;
-    stop();
+    setPlaying(false);
     errorBox.textContent = "settings changed — press ▶ Start again";
   });
 
   model.on("change:error", () => {
-    const err = model.get("error");
-    errorBox.textContent = err;
-    if (err && running) stop();
+    errorBox.textContent = model.get("error");
   });
 
   function showStats() {
@@ -218,18 +267,19 @@ function render({ model, el }) {
       parts.push("round trip " + ms(rtt));
       parts.push("callback " + (100 * load).toFixed(1) + "% of budget");
       parts.push("dropouts " + dropouts);
-      parts.push("key→sound ≈ " + ms(queueMs + rtt + out));
+      parts.push((keys ? "key→sound ≈ " : "control→sound ≈ ") + ms(queueMs + rtt + out));
     }
     stats.textContent = parts.join(" · ");
   }
   const statsTimer = setInterval(showStats, STATS_MS);
   showStats();
   errorBox.textContent = model.get("error");
+  sync(); // started from Python before this view existed
 
   return () => {
     clearInterval(statsTimer);
     if (running) stop();
-    keys.destroy();
+    if (keys) keys.destroy();
   };
 }
 
