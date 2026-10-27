@@ -6,7 +6,38 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- `stream(callback, sample_rate, block_size)` / `Stream` — real-time synthesis.
+  The browser is the clock: an `AudioWorklet` plays a short queue of blocks and
+  pulls each next one from a pyquist-style `callback(block)` running in the
+  kernel, so it works in Web-Worker kernels (JupyterLite / thebe) too. Key
+  presses on the widget call `on_note(midi, is_on)` right away; the widget shows
+  block size, queue, kernel round trip, callback time budget, dropouts and the
+  resulting key-to-sound latency. Blocks travel in batches, so tiny and huge
+  block sizes both run.
+- `browseraudio.sounddevice.OutputStream` — a callback-mode
+  `sounddevice.OutputStream` built on `Stream`, with `CallbackStop`,
+  `CallbackAbort` and `CallbackFlags` (browser dropouts arrive as
+  `output_underflow`). Real-time `sounddevice` code, including course support
+  modules with their own widgets, runs unchanged with the facade registered as
+  `sounddevice`.
+- `keyboard(render, sample_rate)` / `Keyboard` — a synth designed in NumPy ahead
+  of time (a note bank or a looped wavetable with ADSR) and voiced entirely in
+  the browser, with the performance logged back as `events` and re-rendered by
+  `render()`.
+- `KeyMap` — computer-key → MIDI mapping as a small state machine (musical
+  typing by default, with octave keys; context-dependent mappings fit too).
+- `demo/synth.html`.
+
+### Changed
+- `sounddevice.query_devices` resolves `(input, output)` pairs with `kind=`,
+  name substrings and `kind`-only lookups, and the table prints like
+  sounddevice's.
+- The demo site installs the wheel built from its own commit (falling back to
+  PyPI), so it can show unreleased features.
+
+### Fixed
+- CI: pin the test runner to Ubuntu 24.04, which still has Python 3.9.
 
 ## [0.3.0] — 2026-06-24
 
