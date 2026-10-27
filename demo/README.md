@@ -23,7 +23,7 @@ JupyterLite / thebe.
 ```
 demo/
 ├── index.html  record.html  play.html  how-it-works.html
-├── service-worker.js    # pyodide kernel's contents SW (root scope) — for Record
+├── service-worker.js    # pyodide kernel's contents SW (root scope) — for the live pages
 ├── vendor-thebe.sh      # fetches the live-code runtime below
 ├── assets/
 │   ├── style.css        # shared design system (light + dark)

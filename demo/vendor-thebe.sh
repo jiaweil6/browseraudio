@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# vendor-thebe.sh — fetch the live-code runtime for the Record demo.
+# vendor-thebe.sh — fetch the live-code runtime for the interactive demo pages.
 #
-# The Record page boots a real in-browser Python kernel (thebe + thebe-lite +
-# Pyodide) so browseraudio's actual Recorder widget runs, exactly as it would in
-# JupyterLite / thebe. Those bundles are large and versioned, so we vendor them
+# The Record and Play pages boot a real in-browser Python kernel (thebe +
+# thebe-lite + Pyodide) so browseraudio's actual Recorder / Player widgets run,
+# exactly as they would in JupyterLite / thebe. Those bundles are large and versioned, so we vendor them
 # rather than hot-link a CDN — the demo stays self-contained and deployable to
 # any static host.
 #

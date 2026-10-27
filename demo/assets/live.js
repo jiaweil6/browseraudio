@@ -1,10 +1,10 @@
-// live.js — boots a REAL in-browser Python kernel for the Record page.
+// live.js — boots a REAL in-browser Python kernel for the interactive pages
+// (record.html and play.html).
 //
-// Unlike play.html (which drives the frontend modules directly, no kernel),
-// recording needs the genuine round-trip: record() displays an anywidget
-// Recorder whose samples come back to Python over the widget comm. So this page
-// runs the actual browseraudio package on a thebe + thebe-lite + Pyodide kernel,
-// exactly as it would in JupyterLite / thebe.
+// Both pages run the actual browseraudio package on a thebe + thebe-lite +
+// Pyodide kernel, exactly as it would in JupyterLite / thebe: record() displays
+// an anywidget Recorder whose samples come back to Python over the widget comm,
+// and play() displays a Player that receives a NumPy buffer the other way.
 //
 // Design mirrors icmbook's live-cells.js, slimmed for this demo's simple DOM:
 //   - On page load: mount editors over the .cell <pre> blocks (CodeMirror),
@@ -14,10 +14,12 @@
 //   - On first Run: load thebe-lite, open the gate (injecting the pinned
 //     Pyodide + self-hosted piplite settings), await the kernel, micropip-install
 //     browseraudio, then execute cells. thebe renders outputs — including the
-//     Recorder widget — which we relocate into each cell's .cell-out area.
+//     Recorder / Player widgets — which we relocate into each cell's .cell-out
+//     area.
 //
-// NOTE: the anywidget Recorder actually rendering in thebe-lite can only be
-// confirmed in a browser with a microphone — see demo/README.md.
+// NOTE: the widgets actually rendering in thebe-lite can only be confirmed in a
+// real browser over a secure context (and, for Record, with a microphone) — see
+// "Run it locally" in demo/README.md.
 (function () {
   "use strict";
 

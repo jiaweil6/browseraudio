@@ -1,6 +1,6 @@
 /* live.css — make thebe's CodeMirror editors and output look like the demo's
-   static cells. Loaded only by record.html (the live-kernel page). The styling
-   activates under body.live-active so an unmounted page is unaffected. */
+   static cells. Loaded by the live-kernel pages (record.html, play.html). The
+   styling activates under body.live-active so an unmounted page is unaffected. */
 
 /* The editor replaces <pre class="cell-code">; match that block exactly:
    same mono font/size/leading, same padding, same surface, no chrome. */
