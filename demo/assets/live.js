@@ -186,16 +186,34 @@
     setStatus("● Python connected — reload page to reset", false);
   }
 
+  // The deploy workflow builds the repo's own wheel into wheels/ and names it
+  // in wheels/manifest.json, so the site demos the code it was deployed from
+  // (including features not yet on PyPI). Without a manifest — e.g. a plain
+  // local checkout — fall back to the latest PyPI release.
+  async function browseraudioSpec() {
+    try {
+      var res = await fetch(url("wheels/manifest.json"), { cache: "no-store" });
+      if (res.ok) {
+        var manifest = await res.json();
+        if (manifest && manifest.wheel) return url("wheels/" + manifest.wheel);
+      }
+    } catch (e) {
+      /* no manifest: use PyPI */
+    }
+    return "browseraudio";
+  }
+
   async function installBrowseraudio() {
+    var spec = await browseraudioSpec();
     var lines = [
       // Pre-load the WASM build of numpy so micropip doesn't reach for a PyPI
-      // wheel that needs native libraries, then pull browseraudio (+ anywidget)
-      // from PyPI.
+      // wheel that needs native libraries, then pull browseraudio (+ anywidget,
+      // from PyPI).
       "import pyodide_js",
       "from pyodide.ffi import to_js",
       'await pyodide_js.loadPackage(to_js(["numpy"]))',
       "import micropip",
-      'await micropip.install("browseraudio")',
+      "await micropip.install(" + JSON.stringify(spec) + ")",
     ];
     var fut = sessionRef.kernel.requestExecute({ code: lines.join("\n") });
     var kernelErr = null;

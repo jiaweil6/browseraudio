@@ -15,6 +15,7 @@
     <div class="nav-links">
       <a href="record.html">Record</a>
       <a href="play.html">Play</a>
+      <a href="synth.html">Synth</a>
       <a href="how-it-works.html" class="active">How it works</a>
       <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
     </div>
@@ -141,12 +142,13 @@
     <p class="label">Running it · this demo</p>
     <h2>How this demo runs — on the real stack</h2>
     <p>
-      Both interactive pages run the <b>real</b> stack above — thebe + thebe-lite + Pyodide,
+      The interactive pages run the <b>real</b> stack above — thebe + thebe-lite + Pyodide,
       vendored under <code>vendor/thebe-dist/</code> — rather than faking it. On the first
       <b>Run</b>, <code>assets/live.js</code> boots the kernel and <code>micropip</code>-installs
       the actual <code>browseraudio</code> package, so the cells run the genuine API:
-      <code>record()</code> mounts the real <code>Recorder</code> anywidget, and
-      <code>play()</code> the real <code>Player</code> — exactly what you'd get in a notebook.
+      <code>record()</code> mounts the real <code>Recorder</code> anywidget,
+      <code>play()</code> the real <code>Player</code>, and <code>keyboard()</code> the real
+      <code>Keyboard</code> — exactly what you'd get in a notebook.
     </p>
     <pre class="code"><span class="c">// assets/live.js — on first Run</span>
 <span class="k">await</span> loadScript(<span class="s">"vendor/thebe-dist/lite/thebe-lite.min.js"</span>);   <span class="c">// + Pyodide</span>

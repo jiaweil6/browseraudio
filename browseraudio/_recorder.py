@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import pathlib
 from typing import Callable, Optional
 
@@ -11,6 +10,7 @@ import numpy as np
 import traitlets
 
 from ._env import in_worker
+from ._pcm import decode_f32
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -58,9 +58,7 @@ class Recorder(anywidget.AnyWidget):
     def _on_pcm(self, change) -> None:
         if not change["new"]:
             return
-        raw = base64.b64decode(change["new"])
-        # `astype` makes a writable copy (frombuffer is read-only).
-        self._samples = np.frombuffer(raw, dtype="<f4").astype(np.float32).reshape(-1, 1)
+        self._samples = decode_f32(change["new"]).reshape(-1, 1)
         self.error = None
 
     def _on_error(self, change) -> None:

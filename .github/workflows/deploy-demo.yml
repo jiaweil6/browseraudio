@@ -1,11 +1,14 @@
 name: deploy demo
 
-# Publish the demo/ folder to GitHub Pages whenever it changes on main.
+# Publish the demo/ folder to GitHub Pages whenever it — or the package it
+# demos — changes on main.
 on:
   push:
     branches: [main]
     paths:
       - "demo/**"
+      - "browseraudio/**"
+      - "pyproject.toml"
       - ".github/workflows/deploy-demo.yml"
   workflow_dispatch:        # also runnable by hand from the Actions tab
 
@@ -28,6 +31,20 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The live pages micropip-install the wheel named in wheels/manifest.json
+      # (see demo/assets/live.js), so the site demos this commit's code —
+      # including features not yet released to PyPI.
+      - name: Build this repo's wheel into the site
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel -o demo/wheels
+          cd demo/wheels && echo "{\"wheel\": \"$(ls *.whl)\"}" > manifest.json
+          cat manifest.json
 
       - uses: actions/configure-pages@v5
 

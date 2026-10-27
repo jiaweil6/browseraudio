@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import base64
 import pathlib
 from typing import Optional
 
 import anywidget
 import numpy as np
 import traitlets
+
+from ._pcm import encode_f32
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
@@ -79,15 +80,13 @@ def play(samples, sample_rate: Optional[int] = None, *, autoplay: bool = True) -
         )
 
     n_frames, n_channels = arr.shape
-    # Channel-major (planar) layout: all of channel 0, then channel 1, ...
-    # — that's what Web Audio's AudioBuffer.copyToChannel expects.
-    planar = np.ascontiguousarray(arr.T, dtype="<f4")
-
     player = Player(
         sample_rate=int(sample_rate),
         n_channels=int(n_channels),
         autoplay=autoplay,
     )
-    player._pcm_b64 = base64.b64encode(planar.tobytes()).decode("ascii")
+    # Channel-major (planar) layout: all of channel 0, then channel 1, ...
+    # — that's what Web Audio's AudioBuffer.copyToChannel expects.
+    player._pcm_b64 = encode_f32(arr.T)
     display(player)
     return player
