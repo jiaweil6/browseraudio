@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Synth · browseraudio</title>
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/live.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html">Record</a>
+      <a href="play.html">Play</a>
+      <a href="synth.html" class="active">Synth</a>
+      <a href="realtime.html">Real-time</a>
+      <a href="how-it-works.html">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="label">Feature · Synth</p>
+  <h1>Play a NumPy synth live</h1>
+  <p class="lead">
+    <code>keyboard(render, sample_rate)</code> turns your computer keyboard into an
+    instrument. You design the sound in NumPy; the page plays it in real time.
+  </p>
+
+  <p class="callout">
+    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) with the actual
+    <code>browseraudio</code> package — so the cells below are the genuine API, just like
+    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the first
+    <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
+  </p>
+
+  <div class="runbar">
+    <button class="run-all" id="run-all">▶ Run all</button>
+    <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
+  </div>
+
+  <div class="step-h"><span class="n">01</span><h2>Design a sound, then play it</h2></div>
+  <p>
+    A function from frequency to samples — here a decaying sine "pluck". Python renders it
+    once for every note the keyboard can reach, then hands the bank to the page.
+    <b>Click the keyboard</b>, then play: <code>A S D F G H J K L ;</code> are the white keys,
+    <code>W E T Y U O P</code> the black keys, and <code>Z</code> / <code>X</code> shift
+    the octave.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-pluck">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> browseraudio <span class="k">import</span> keyboard, play
+
+sr = <span class="n">22050</span>
+t = np.<span class="f">arange</span>(sr) / sr                  <span class="c"># one second</span>
+
+<span class="k">def</span> <span class="f">pluck</span>(freq):
+    <span class="k">return</span> np.<span class="f">sin</span>(<span class="n">2</span>*np.pi*freq*t) * np.<span class="f">exp</span>(-<span class="n">4</span>*t)
+
+kb = <span class="f">keyboard</span>(pluck, sr)</code></pre>
+    <div class="cell-out" data-out="synth-pluck" hidden></div>
+  </div>
+
+  <p class="callout">
+    Your key presses never wait on Python: the sound is already in the page, so notes start
+    as fast as the browser's audio output allows. Python hears about them afterwards, as
+    <code>kb.events</code>.
+  </p>
+
+  <div class="step-h"><span class="n">02</span><h2>A wavetable with an envelope</h2></div>
+  <p>
+    Or give one cycle of a waveform: the page loops it at any pitch and shapes each note
+    with an ADSR envelope, so notes sustain for as long as you hold the key.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-wavetable">▶ Run</button></div>
+<pre class="cell-code"><code>cycle = np.<span class="f">linspace</span>(-<span class="n">1</span>, <span class="n">1</span>, <span class="n">256</span>)        <span class="c"># one sawtooth cycle</span>
+kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span>*cycle,
+              attack=<span class="n">0.02</span>, decay=<span class="n">0.2</span>, sustain=<span class="n">0.6</span>, release=<span class="n">0.4</span>)</code></pre>
+    <div class="cell-out" data-out="synth-wavetable" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">03</span><h2>Replay your performance</h2></div>
+  <p>
+    Play something above first. <code>kb.render()</code> re-synthesises exactly what you
+    played, offline, as a NumPy array you can analyse, edit, or play back.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-render">▶ Run</button></div>
+<pre class="cell-code"><code><span class="f">print</span>(<span class="f">len</span>(kb.events), <span class="s">"note events"</span>)
+<span class="f">play</span>(kb.<span class="f">render</span>(), kb.sample_rate)</code></pre>
+    <div class="cell-out" data-out="synth-render" hidden></div>
+  </div>
+
+  <hr class="rule" />
+  <p>Want your own voice as the instrument? <a href="record.html">Record it <span class="arr">→</span></a>, then build a <code>render</code> function that resamples <code>rec.samples</code>.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+<script src="assets/live.js"></script>
+</body>
+</html>

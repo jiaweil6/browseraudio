@@ -14,8 +14,10 @@ stack can't run. `browseraudio` does the capture *and* playback on the page's ma
 thread (via a tiny [anywidget](https://anywidget.dev) frontend) and ferries the
 float32 samples across, so it works even when the kernel runs in a worker.
 
-> **Status:** recording, playback, and a `sounddevice`-compatible facade
-> (`browseraudio.sounddevice`). See the [roadmap](#roadmap) for what's next.
+> **Status:** recording, playback, **real-time synthesis** (a block callback
+> played live, controlled from the computer keyboard or any widget), and a
+> `sounddevice`-compatible facade (`browseraudio.sounddevice`, including
+> `OutputStream`). See the [roadmap](#roadmap) for what's next.
 
 ## Contents
 
@@ -106,6 +108,38 @@ play(rec.to_pyquist())               # sample_rate read from the pyquist.Audio
 > playback may not start on its own — just click the **▶ Play** button the
 > widget shows.
 
+### Real-time synthesis
+
+Write the audio callback a sound card would call — fill one block, keep your
+state (here the phase) between blocks — and play it live. Press **▶ Start**,
+click the widget, and play the computer keyboard (`A W S E D F …`, `Z`/`X` for
+octaves):
+
+```python
+import numpy as np
+from browseraudio import stream
+
+class Sinusoid:
+    def __init__(self, pitch=60):
+        self.pitch, self.phase = pitch, 0.0
+
+    def callback(self, block):                  # block: (B, channels), .sample_rate
+        f = 440 * 2 ** ((self.pitch - 69) / 12)
+        dphase = 2 * np.pi * f / block.sample_rate
+        block[:] = 0.3 * np.sin(self.phase + dphase * np.arange(len(block)))[:, None]
+        self.phase = (self.phase + dphase * len(block)) % (2 * np.pi)
+
+synth = Sinusoid()
+s = stream(synth.callback, sample_rate=44100, block_size=512,
+           on_note=lambda midi, on: setattr(synth, "pitch", midi) if on else None)
+```
+
+The widget shows the block size, the queue, the kernel round trip, how much of
+the time budget your callback uses, dropouts, and the resulting key-to-sound
+latency — try `block_size=1` and `block_size=16384`. Existing
+`sounddevice.OutputStream` code runs too, via
+[`browseraudio.sounddevice`](#browseraudiosounddevice).
+
 ## API reference
 
 ### `record(duration=3.0)`
@@ -143,6 +177,76 @@ Web Worker. Multi-channel buffers are sent channel-major; the `AudioContext`
 resamples to its own rate, so any `sample_rate` is fine. Use
 [`play()`](#playsamples-sample_rate--autoplaytrue) rather than constructing it
 directly.
+
+### `stream(callback, sample_rate=44100, block_size=512, **kwargs)`
+
+Create a [`Stream`](#stream), display it, and return it — real-time synthesis
+from a block callback, played live in the browser.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `callback` | callable | — | `callback(block)` fills `block`, a zeroed float32 `(block_size, channels)` array with a `.sample_rate` (the shape of a pyquist block), in place — or returns an array of that shape. |
+| `sample_rate` | `int` | `44100` | The `AudioContext` rate, in Hz. |
+| `block_size` | `int` | `512` | Frames per block (B). |
+| `channels` | `int` | `1` | Output channels. |
+| `lookahead` | `float` | `0.04` | Seconds of audio kept queued in the browser (rounded up to whole blocks, at least two). Below the kernel round trip, the stream drops out. |
+| `on_note` | callable | `None` | `on_note(midi, is_on)` for each key press / release on the widget. |
+| `keymap` | `KeyMap` | musical typing | Which computer keys play which notes (see [`KeyMap`](#keymap)). |
+
+### `Stream`
+
+The widget behind `stream()`. **How it works:** the browser keeps the clock. An
+`AudioWorklet` plays a small queue of blocks, and each time it finishes one the
+page asks the kernel for another; Python answers by calling your `callback`. So
+Python never keeps time or runs a loop — it only answers widget messages, which
+even a Web-Worker kernel (JupyterLite / thebe) handles **whenever no cell is
+running**. A long-running cell therefore makes the stream drop out, and a
+control change (a key, a slider) is heard after the queued audio plus one round
+trip.
+
+| Member | Description |
+|---|---|
+| `start()` / `stop()` | Start or stop playback (the **▶ Start** / **■ Stop** button does the same). |
+| `playing` | Whether the stream is running. |
+| `callback`, `on_note` | Reassignable at any time; the next block uses the new one. |
+| `error` | The last callback / `on_note` error (the stream stops on one), else `""`. |
+| `blocks_rendered`, `busy`, `dropouts` | Blocks made, seconds spent in `callback`, and browser dropouts since the last start. |
+
+### `keyboard(render=None, sample_rate=None, **kwargs)`
+
+Create, display, and return a [`Keyboard`](#keyboard): a synth whose sound you
+design in NumPy *ahead of time* and then play with the computer keyboard, voiced
+entirely in the browser — the lowest-latency option, since nothing goes back to
+the kernel while you play. Pass either `render(freq) -> ndarray` (called once
+per playable note, with `sample_rate`) or `wavetable=` one cycle of a waveform
+(looped at any pitch).
+
+| Parameter | Default | Description |
+|---|---|---|
+| `attack`, `decay`, `sustain`, `release` | `0.005`, `0`, `1`, `0.05` | Linear ADSR envelope (seconds; `sustain` is a level). |
+| `gain` | `0.5` | Level per voice. |
+| `one_shot` | `False` | Note-bank mode: play each note to its end, ignoring key-up. |
+| `max_voices` | `16` | Polyphony; the oldest voice is stolen beyond it. |
+| `keymap` | musical typing | See [`KeyMap`](#keymap). |
+
+### `Keyboard`
+
+| Member | Description |
+|---|---|
+| `events` | Notes played, as `(seconds, midi, "on" \| "off")`; they reach the kernel in small batches shortly after playing. |
+| `render()` | Re-synthesise the performance offline: float32 `(n_frames, 1)` at `sample_rate`. |
+| `on_note(cb, remove=False)` | Run `cb(event)` for each note played. |
+| `clear()` | Forget `events` and restart the clock. |
+
+### `KeyMap`
+
+Maps computer keys to MIDI notes through a small state machine: pressing
+`keys[i]` looks up `table[state][i] -> (midi, next_state)`, plays `midi` (unless
+`None`) and moves to `next_state` — so octave keys are entries that only change
+state, and context-dependent (Piano-Genie-style) mappings fit the same table.
+Keys are `KeyboardEvent.code` names (`"KeyA"`, `"Semicolon"`), so the physical
+layout is the same on QWERTY and AZERTY. `KeyMap.musical_typing(base=60,
+octaves=(-1, 0, 1))` is the DAW-style default.
 
 ### `Recorder`
 
@@ -197,9 +301,20 @@ except (OSError, ModuleNotFoundError):
 |---|---|---|
 | `play(data, samplerate=None, **kw)` | drop-in | Delegates to [`play()`](#playsamples-sample_rate--autoplaytrue); fire-and-forget, single cell. |
 | `wait(ignore_errors=True)` | drop-in | No-op — browser playback doesn't block. |
-| `query_devices(device=None, kind=None)` | drop-in | A synthetic two-device table (browser mic + speakers). |
+| `OutputStream(samplerate, blocksize, device, channels, callback=..., ...)` | drop-in (callback mode) | Runs `callback(outdata, frames, time, status)` in real time through a [`Stream`](#stream): `start()` shows a compact engine widget; `stop()` / `close()` / `abort()`, `active` / `stopped` / `closed`, `finished_callback`, `cpu_load`, `with` blocks. Browser dropouts arrive as `status.output_underflow`. `device` is ignored, only `float32`, and `time` holds estimates. Start the stream and let the cell finish — don't `sd.sleep()` in it (blocks are made only while no cell runs). |
+| `CallbackStop`, `CallbackAbort`, `CallbackFlags` | drop-in | Raise either to end a stream; `CallbackFlags` is the `status` object. |
+| `query_devices(device=None, kind=None)` | drop-in | A synthetic two-device table (browser mic + speakers), printed like sounddevice's; resolves indices, name substrings, and `(input, output)` pairs with `kind`. |
 | `default` | drop-in | Mimics `sd.default`; its `device` slot is indexable and assignable. |
 | `rec(...)` | **not supported** | Raises with guidance toward the two-cell [`record()`](#record-duration30): the browser picks the sample rate and can't fill a buffer synchronously in one cell. |
+
+Code written against `sounddevice` — including course support modules with
+their own widgets — can run unchanged by registering the facade under that name
+before anything imports `sounddevice`:
+
+```python
+import sys, browseraudio.sounddevice
+sys.modules["sounddevice"] = browseraudio.sounddevice
+```
 
 ## How it works
 
@@ -221,9 +336,14 @@ widgets do: JupyterLite, thebe-lite, classic Jupyter, and marimo.
 
 Under the hood, audio crosses the comm as base64-encoded float32. Recording uses a
 `ScriptProcessorNode` to accumulate `duration` seconds before sending it up;
-playback hands a buffer to a one-shot `AudioBufferSourceNode`. (Both are
-deliberately simple — see the [roadmap](#roadmap) for the planned `AudioWorklet`
-upgrade.)
+playback hands a buffer to a one-shot `AudioBufferSourceNode`.
+
+Real-time synthesis turns the flow around: the **browser is the clock**. An
+`AudioWorklet` plays a short queue of blocks and, as each finishes, the page asks
+the kernel for the next; the kernel answers by running your callback. Because
+the kernel only *reacts* to messages, this works in a Web-Worker kernel too —
+the same reason widget values (a key, a slider) reach your callback between
+blocks.
 
 ## Troubleshooting
 
@@ -235,6 +355,9 @@ upgrade.)
 | **Recorded, but silent** | Check `rec.error`, and that the right input device is selected and unmuted at the OS/browser level. |
 | **`await record()` hangs** | In a Web-Worker kernel (JupyterLite / thebe) the kernel can't process the widget reply mid-cell — use the two-cell flow. On the page's main thread, `await rec.result()` works in one cell. |
 | **`to_pyquist()` raises `ImportError`** | Install pyquist (`pip install pyquist`), or use `rec.samples` / `rec.sample_rate` directly. |
+| **A stream crackles (dropouts)** | The kernel didn't answer in time: a cell is running (blocks are only made while the kernel is idle), the callback is slower than real time (see "% of budget"), or the queue is shorter than the round trip — raise `lookahead`. |
+| **A stream started from code is silent** | The browser's autoplay policy kept audio off; click **🔈 Click to enable audio** on the widget. |
+| **Keys don't play** | Click the widget first — it only listens while focused (so typing in cells never plays notes). |
 
 ## Development
 
@@ -251,11 +374,18 @@ Project layout:
 
 | Path | Purpose |
 |---|---|
-| `browseraudio/__init__.py` | Public API (`Recorder`, `record`, `Player`, `play`) and version. |
+| `browseraudio/__init__.py` | Public API and version. |
 | `browseraudio/_recorder.py` | The `Recorder` widget and `record()` (Python side). |
 | `browseraudio/_player.py` | The `Player` widget and `play()` (Python side). |
+| `browseraudio/_stream.py` | The `Stream` widget and `stream()` — real-time block synthesis. |
+| `browseraudio/_keyboard.py` | The `Keyboard` widget, `keyboard()`, and `KeyMap`. |
+| `browseraudio/sounddevice.py` | The `sounddevice`-shaped facade, including `OutputStream`. |
+| `browseraudio/_pcm.py` | The base64 float32 wire format. |
 | `browseraudio/static/recorder.js` | Recorder frontend — Web Audio capture. |
 | `browseraudio/static/player.js` | Player frontend — Web Audio playback. |
+| `browseraudio/static/stream.js` | Stream frontend — the AudioWorklet and block requests. |
+| `browseraudio/static/keyboard.js` | Keyboard frontend — note voicing. |
+| `browseraudio/static/keys.js` | The computer-keyboard control surface shared by Stream and Keyboard. |
 | `tests/` | The `pytest` suite (Python side, headless). |
 | `demo/` | Static demo site, published to [GitHub Pages](https://jiaweil6.github.io/browseraudio/). |
 | `pyproject.toml` | Packaging metadata; `static/*.js` is shipped as package data. |
@@ -275,11 +405,16 @@ path isn't unit-tested yet.) Contributions and issues are welcome.
   is *blocking* — a Web-Worker kernel can't honor that in one cell, so `rec`
   raises with guidance toward the two-cell `record()` flow (and
   `Recorder.result()` offers an `await` path on the main thread). _(Unreleased)_
-- **AudioWorklet backend** — replace the deprecated `ScriptProcessorNode`.
+- ✅ **Real-time synthesis** — `stream()` and `sounddevice.OutputStream`: an
+  `AudioWorklet` pulls blocks from a Python callback. Control latency is the
+  queue plus a kernel round trip (~50–100 ms). _(Unreleased)_
+- ✅ **Keyboard synth** — `keyboard()`: sounds designed in NumPy, voiced in the
+  browser with no kernel round trip. _(Unreleased)_
+- **Piano-Genie-style mappings** — context-dependent `KeyMap` tables from a
+  Python function.
+- **AudioWorklet capture** — replace the deprecated `ScriptProcessorNode` in
+  `Recorder`.
 - **Binary comm transport** — send raw buffers instead of base64.
-- **Streaming** (stretch) — generator → ring buffer → AudioWorklet. Bounded by
-  the browser: Python can't run in the audio thread, and `SharedArrayBuffer`
-  needs cross-origin-isolation (COOP/COEP) headers.
 
 ## License
 

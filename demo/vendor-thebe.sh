@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# vendor-thebe.sh — fetch the live-code runtime for the Record demo.
+# vendor-thebe.sh — fetch the live-code runtime for the interactive demo pages.
 #
-# The Record page boots a real in-browser Python kernel (thebe + thebe-lite +
-# Pyodide) so browseraudio's actual Recorder widget runs, exactly as it would in
-# JupyterLite / thebe. Those bundles are large and versioned, so we vendor them
-# rather than hot-link a CDN — the demo stays self-contained and deployable to
-# any static host.
+# The Record and Play pages boot a real in-browser Python kernel (thebe +
+# thebe-lite + Pyodide) so browseraudio's actual Recorder / Player widgets run,
+# exactly as they would in JupyterLite / thebe. Those bundles are large and
+# versioned, so we vendor them rather than hot-link a CDN — the demo stays
+# self-contained and deployable to any static host.
 #
 # Pinned to the same stack icmbook ships: thebe-lite 0.5.0 / thebe 0.9.3.
 # Re-run this only to bump versions. Idempotent: skips if already vendored.

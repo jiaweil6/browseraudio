@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Real-time · browseraudio</title>
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/live.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">browseraudio</a>
+    <div class="nav-links">
+      <a href="record.html">Record</a>
+      <a href="play.html">Play</a>
+      <a href="synth.html">Synth</a>
+      <a href="realtime.html" class="active">Real-time</a>
+      <a href="how-it-works.html">How it works</a>
+      <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="label">Feature · Real-time</p>
+  <h1>Real-time synthesis, block by block</h1>
+  <p class="lead">
+    A sound card doesn't take a whole song at once: it keeps asking for the next short
+    <b>block</b> of samples, and a <b>callback</b> must fill each one in time. Here the
+    browser is the sound card and your NumPy callback answers it — live, while you play.
+  </p>
+
+  <p class="callout">
+    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) with the actual
+    <code>browseraudio</code> package — so the cells below are the genuine API, just like
+    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the first
+    <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
+  </p>
+
+  <div class="runbar">
+    <button class="run-all" id="run-all">▶ Run all</button>
+    <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
+  </div>
+
+  <div class="step-h"><span class="n">01</span><h2>A callback with state</h2></div>
+  <p>
+    The control (the pitch) is read once per block, and the phase is <b>state</b>,
+    carried from one block to the next so the sine never jumps. Run the cell, press
+    <b>▶ Start</b>, click the keyboard, then play: <code>A S D F G H J K L ;</code> are
+    the white keys, <code>W E T Y U O P</code> the black keys, <code>Z</code> /
+    <code>X</code> shift the octave.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-sine">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> browseraudio <span class="k">import</span> stream
+
+<span class="k">class</span> <span class="f">Sinusoid</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(self, pitch=<span class="n">60</span>):
+        self.pitch, self.phase = pitch, <span class="n">0.0</span>
+
+    <span class="k">def</span> <span class="f">callback</span>(self, block):           <span class="c"># block: (B, 1), with .sample_rate</span>
+        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)  <span class="c"># read the control once</span>
+        B = <span class="f">len</span>(block)
+        dphase = <span class="n">2</span> * np.pi * f / block.sample_rate
+        block[:] = <span class="n">0.3</span> * np.<span class="f">sin</span>(self.phase + dphase * np.<span class="f">arange</span>(B))[:, np.newaxis]
+        self.phase = (self.phase + dphase * B) % (<span class="n">2</span> * np.pi)
+
+synth = <span class="f">Sinusoid</span>()
+s = <span class="f">stream</span>(synth.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>,
+           on_note=<span class="k">lambda</span> midi, on: <span class="f">setattr</span>(synth, <span class="s">"pitch"</span>, midi) <span class="k">if</span> on <span class="k">else</span> <span class="k">None</span>)</code></pre>
+    <div class="cell-out" data-out="rt-sine" hidden></div>
+  </div>
+
+  <p class="callout">
+    Python never keeps time here: the page's audio thread plays a short queue of blocks
+    and asks the kernel for the next one as each finishes. So a key press is heard after
+    the <b>queued audio</b> plus one <b>round trip</b> to the kernel — the widget shows
+    both, live.
+  </p>
+
+  <div class="step-h"><span class="n">02</span><h2>Block size: time budget vs. latency</h2></div>
+  <p>
+    Every block must be ready before the one ahead of it finishes playing. Small blocks
+    mean many callback calls per second — watch <b>% of budget</b> climb at
+    <code>B = 1</code>. Big blocks are cheap, but your key presses wait behind them —
+    at <code>B = 16384</code> notes arrive late and quick ones are skipped entirely.
+    Change the size, run the cell, and press <b>▶ Start</b> again.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-blocksize">▶ Run</button></div>
+<pre class="cell-code"><code>s.block_size = <span class="n">16384</span>     <span class="c"># try 1, 64, 512, 16384 — then ▶ Start</span></code></pre>
+    <div class="cell-out" data-out="rt-blocksize" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">03</span><h2>A live wavetable synth</h2></div>
+  <p>
+    Read one cycle of a waveform at a speed set by the pitch, with linear interpolation.
+    Releasing the key silences the block and resets the read position, so the next note
+    starts at the top of the table; switching keys while one is held keeps the phase.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-wavetable">▶ Run</button></div>
+<pre class="cell-code"><code>s.<span class="f">stop</span>()                          <span class="c"># stop the stream above</span>
+
+M = <span class="n">2048</span>
+m = np.<span class="f">arange</span>(M)
+table = <span class="f">sum</span>(a * np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * k * m / M) <span class="k">for</span> k, a <span class="k">in</span> <span class="f">enumerate</span>([<span class="n">1</span>, <span class="n">0.5</span>, <span class="n">0.5</span>, <span class="n">0.25</span>], <span class="n">1</span>))
+
+<span class="k">class</span> <span class="f">Wavetable</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(self):
+        self.pitch, self.pos = <span class="k">None</span>, <span class="n">0.0</span>  <span class="c"># None: no key held</span>
+
+    <span class="k">def</span> <span class="f">callback</span>(self, block):
+        <span class="k">if</span> self.pitch <span class="k">is</span> <span class="k">None</span>:
+            self.pos = <span class="n">0.0</span>              <span class="c"># the block stays silent</span>
+            <span class="k">return</span>
+        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)
+        step = f * M / block.sample_rate
+        p = (self.pos + step * np.<span class="f">arange</span>(<span class="f">len</span>(block))) % M
+        i = p.<span class="f">astype</span>(<span class="f">int</span>)
+        a = p - i
+        block[:, <span class="n">0</span>] = <span class="n">0.15</span> * ((<span class="n">1</span> - a) * table[i] + a * table[(i + <span class="n">1</span>) % M])
+        self.pos = (self.pos + step * <span class="f">len</span>(block)) % M
+
+wt = <span class="f">Wavetable</span>()
+
+<span class="k">def</span> <span class="f">on_note</span>(midi, on):
+    <span class="k">if</span> on:
+        wt.pitch = midi
+    <span class="k">elif</span> midi == wt.pitch:             <span class="c"># the held key was released</span>
+        wt.pitch = <span class="k">None</span>
+
+s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note)</code></pre>
+    <div class="cell-out" data-out="rt-wavetable" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">04</span><h2>sounddevice code, and any widget as a control</h2></div>
+  <p>
+    Code written for <code>sounddevice.OutputStream</code> runs too: its
+    <code>callback(outdata, frames, time, status)</code> is pulled the same way. Any
+    widget can steer it — its value reaches the kernel between blocks. Moving the slider
+    multiplies the tone by a <b>ramp</b> from the previous level to the new one
+    (de-zippering), so the volume glides instead of clicking.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-outputstream">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> ipywidgets <span class="k">as</span> widgets
+<span class="k">import</span> browseraudio.sounddevice <span class="k">as</span> sd
+
+s.<span class="f">stop</span>()
+level = widgets.<span class="f">FloatSlider</span>(value=<span class="n">0.5</span>, min=<span class="n">0</span>, max=<span class="n">1</span>, step=<span class="n">0.1</span>, description=<span class="s">"level"</span>)
+phase, previous = <span class="n">0.0</span>, level.value
+
+<span class="k">def</span> <span class="f">callback</span>(outdata, frames, time, status):
+    <span class="k">global</span> phase, previous
+    step = <span class="n">2</span> * np.pi * <span class="n">220</span> / <span class="n">44100</span>
+    tone = np.<span class="f">sin</span>(phase + step * np.<span class="f">arange</span>(frames))
+    phase = (phase + step * frames) % (<span class="n">2</span> * np.pi)
+    ramp = np.<span class="f">linspace</span>(previous, level.value, frames, endpoint=<span class="k">False</span>)
+    previous = level.value
+    outdata[:] = <span class="n">0.3</span> * (ramp * tone)[:, np.newaxis]
+
+out = sd.<span class="f">OutputStream</span>(samplerate=<span class="n">44100</span>, blocksize=<span class="n">512</span>, channels=<span class="n">1</span>, callback=callback)
+out.<span class="f">start</span>()
+level</code></pre>
+    <div class="cell-out" data-out="rt-outputstream" hidden></div>
+  </div>
+
+  <p class="callout">
+    Blocks are made only while no cell is running, so keep long computations out of the
+    way while a stream plays — a busy kernel is heard as dropouts.
+  </p>
+
+  <hr class="rule" />
+  <p>Prefer zero round trips? <a href="synth.html">Design a sound up front and play it in the page <span class="arr">→</span></a></p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>browseraudio — MIT licensed</span>
+    <span><a href="https://pypi.org/project/browseraudio/">PyPI</a> · <a href="https://github.com/jiaweil6/browseraudio">GitHub</a></span>
+  </div>
+</footer>
+
+<script src="assets/live.js"></script>
+</body>
+</html>

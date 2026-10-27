@@ -6,15 +6,22 @@ Web Audio and ``getUserMedia`` are unavailable; this library does the capture
 (and playback) on the main thread (via an ``anywidget`` frontend) and ships
 the samples across.
 
-Recording, playback, and a ``sounddevice``-compatible facade
-(:mod:`browseraudio.sounddevice`) so libraries like pyquist can fall back to it
-in the browser. On the page's main thread, ``await Recorder.result()`` resolves
-a take in one cell; in a Web-Worker kernel use the two-cell flow. See the README
-for the roadmap (e.g. an AudioWorklet backend).
+Recording, playback, real-time synthesis (:func:`stream`: the browser pulls
+blocks from a pyquist-style ``callback(block)`` while you play the computer
+keyboard), a pre-rendered keyboard synth (:func:`keyboard`), and a
+``sounddevice``-compatible facade (:mod:`browseraudio.sounddevice`) so
+libraries like pyquist can fall back to it in the browser. On the page's main
+thread, ``await Recorder.result()`` resolves a take in one cell; in a
+Web-Worker kernel use the two-cell flow. See the README for the roadmap.
 """
 
+from ._keyboard import Keyboard, KeyMap, keyboard
 from ._player import Player, play
 from ._recorder import Recorder, record
+from ._stream import Block, Stream, stream
 
-__all__ = ["Recorder", "record", "Player", "play"]
+__all__ = [
+    "Recorder", "record", "Player", "play", "Keyboard", "KeyMap", "keyboard",
+    "Stream", "Block", "stream",
+]
 __version__ = "0.3.0"
