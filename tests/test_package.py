@@ -13,6 +13,7 @@ import browseraudio
 def test_public_exports():
     assert set(browseraudio.__all__) == {
         "Recorder", "record", "Player", "play", "Keyboard", "KeyMap", "keyboard",
+        "Stream", "Block", "stream",
     }
     for name in browseraudio.__all__:
         assert hasattr(browseraudio, name)
@@ -39,3 +40,5 @@ def test_frontend_assets_are_packaged():
     assert (static / "recorder.js").is_file()
     assert (static / "player.js").is_file()
     assert (static / "keyboard.js").is_file()
+    assert (static / "keys.js").is_file()
+    assert (static / "stream.js").is_file()

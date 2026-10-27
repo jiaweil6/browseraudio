@@ -13,6 +13,16 @@ from ._pcm import encode_f32
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
+
+def _bundle(*names: str) -> str:
+    """Concatenate frontend sources into one anywidget module.
+
+    The keyboard widgets share ``keys.js`` (the on-screen keys and key-mapping
+    state machine), which isn't a module of its own — it's prepended so its
+    functions are in scope for the widget source that follows.
+    """
+    return "\n".join((_STATIC / name).read_text(encoding="utf-8") for name in names)
+
 # Ableton-style "musical typing": the home row plays the white keys and the row
 # above it the black keys, as (KeyboardEvent.code, semitones above the base).
 # Physical key codes, so the layout is the same on QWERTY, AZERTY, ...
@@ -197,7 +207,7 @@ class Keyboard(anywidget.AnyWidget):
         events: Notes played so far, as ``(seconds, midi, "on" | "off")``.
     """
 
-    _esm = _STATIC / "keyboard.js"
+    _esm = _bundle("keys.js", "keyboard.js")
 
     mode = traitlets.Unicode("bank").tag(sync=True)
     sample_rate = traitlets.Int(0).tag(sync=True)
