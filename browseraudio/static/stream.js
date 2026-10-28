@@ -1,23 +1,6 @@
-// stream.js — anywidget frontend for browseraudio.Stream.
-// (Python prepends ui.js, genie.js and controls.js.)
-//
-// Real-time synthesis with the browser as the clock. An AudioWorklet on the
-// audio thread plays a small FIFO of blocks; each time it finishes one, this
-// main-thread code asks the kernel for another ("need"), and Python answers by
-// running the user's callback(block) ("blocks"). Pulling like this means
-// Python never has to keep time or run a loop: it only reacts to widget
-// messages, which a kernel — even one in a Web Worker (JupyterLite / thebe) —
-// processes whenever no cell is running. Key presses go to Python straight
-// away ("note"), so a control change is heard from the next block rendered:
-// about the queued audio plus one round trip later.
-//
-// Blocks travel in batches (one message, several blocks back to back, each
-// planar) so tiny block sizes don't mean one message per block.
-//
-// No clicks from the plumbing: if the queue runs dry (a dropout) the worklet
-// lets the last sample decay over a few milliseconds instead of jumping to
-// zero, fades the stream back in when blocks resume (and at start), and Stop
-// fades the output out before closing.
+// stream.js — Stream frontend. The browser is the clock: an AudioWorklet plays a
+// queue of blocks and requests each next one from Python ("need" -> "blocks", in
+// batches). Dropouts and Stop fade instead of clicking.
 
 const STATS_MS = 250;
 const MIN_BATCH_S = 0.005; // don't ask Python for less than ~5 ms of audio at once
@@ -52,7 +35,7 @@ class BrowseraudioStream extends AudioWorkletProcessor {
     while (i < n) {
       const batch = this.queue[0];
       if (!batch) {
-        // Ran dry: hold the last value and let it decay, rather than a jump to 0.
+        // Ran dry: let the last value decay instead of jumping to 0.
         for (let c = 0; c < channels; c++) {
           let t = this.dry ? this.tail[c] || 0 : this.last[c] || 0;
           const dst = out[c];
@@ -122,14 +105,12 @@ function render({ model, el }) {
   let dropouts = 0;
 
   const button = uiButton({ icon: "play", label: "Start" });
-  // Shown when the browser's autoplay policy kept the AudioContext suspended
-  // (a stream started from Python, with no click on the page to allow it).
+  // Shown if autoplay kept the context suspended.
   const unmute = uiButton({ label: "🔈 Enable audio", secondary: true });
   unmute.style.display = "none";
   ui.actions.append(unmute, button);
 
-  // The computer-keyboard control surface (Keys / Genie), unless this is a
-  // plain sounddevice-style OutputStream.
+  // Key surface, unless this is a plain OutputStream.
   const controls = keyboard
     ? createControls(model, ui, {
         onNoteOn: (midi) => {
@@ -151,8 +132,7 @@ function render({ model, el }) {
   const smooth = (prev, x) => (prev === null ? x : 0.8 * prev + 0.2 * x);
 
   const blockSeconds = () => model.get("block_size") / model.get("sample_rate");
-  // Blocks to keep queued or on their way: `lookahead` seconds, and always at
-  // least two (one playing, one ready) or every block would end in a gap.
+  // Blocks to keep queued: `lookahead` s, at least two.
   const target = () => Math.max(2, Math.ceil(model.get("lookahead") / blockSeconds()));
 
   function request() {
@@ -192,8 +172,7 @@ function render({ model, el }) {
 
   async function start() {
     const sr = model.get("sample_rate");
-    // From the Start button this runs inside the click, so autoplay allows it;
-    // started from Python it may come up suspended (see `unmute`).
+    // Autoplay allows this from a click; from Python it may stay suspended.
     ctx = newAudioContext({ sampleRate: sr, latencyHint: "interactive" });
     ctx.onstatechange = showState;
     if (ctx.state !== "running") ctx.resume().catch(() => {});
@@ -234,7 +213,7 @@ function render({ model, el }) {
     const [c, n, m] = [ctx, node, master];
     node = ctx = master = null;
     if (c) {
-      // Fade out over ~10 ms, then tear down.
+      // Fade out, then tear down.
       if (m) m.gain.setTargetAtTime(0, c.currentTime, 0.008);
       setTimeout(() => {
         if (n) n.disconnect();
@@ -245,8 +224,7 @@ function render({ model, el }) {
     model.send({ type: "stop" });
   }
 
-  // `playing` is the single source of truth, set from either side: the
-  // Start/Stop button here, or start()/stop() in Python.
+  // `playing` is the source of truth (button or Python).
   function setPlaying(value) {
     if (model.get("playing") === value) return;
     model.set("playing", value);
@@ -268,8 +246,7 @@ function render({ model, el }) {
   model.on("change:playing", sync);
   button.addEventListener("click", () => setPlaying(!model.get("playing")));
 
-  // The worklet and AudioContext are built for one block size / channel count
-  // / rate; a change mid-stream needs a fresh start.
+  // Format changes need a fresh start.
   model.on("change:block_size change:channels change:sample_rate", () => {
     if (!running) return;
     setPlaying(false);

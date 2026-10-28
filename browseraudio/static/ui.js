@@ -1,16 +1,5 @@
-// ui.js — the shared look and controls of every browseraudio widget.
-// (Not a module of its own: Python prepends it to each widget's source, see
-// `_bundle()` in _assets.py, so these functions are in scope there.)
-//
-// Every widget renders into a Shadow DOM, so the host page's CSS (a notebook
-// theme, a thebe-powered course site) can't restyle it and ours can't leak
-// out. Theming still flows in through inherited CSS custom properties:
-//   - in a Jupyter frontend (JupyterLab, JupyterLite, Notebook 7 — detected by
-//     the theme attribute they put on <body>) we use its --jp-* palette and
-//     fonts, so widgets look native in light and dark themes;
-//   - anywhere else (thebe on a plain site) we derive the palette from the
-//     page's own text colour and font, so the widget matches light and dark
-//     pages without knowing their CSS.
+// ui.js — shared look and controls. Widgets render in a Shadow DOM; in Jupyter
+// frontends they use the --jp-* theme, elsewhere the page's text colour and font.
 
 const BA_STYLE = `
 :host { all: initial; display: block; margin: 6px 0; max-width: 820px;
@@ -178,7 +167,7 @@ function baEl(tag, cls, html) {
   return node;
 }
 
-// Which palette to use, kept in sync with theme switches.
+// Use the Jupyter palette when the page is a Jupyter frontend.
 function watchTheme(host) {
   const apply = () => host.classList.toggle("ba-jp", !!(document.body && document.body.dataset.jpThemeLight));
   apply();
@@ -187,12 +176,10 @@ function watchTheme(host) {
   return () => observer.disconnect();
 }
 
-// The frame every widget shares: title + status pill + actions, a body,
-// a notice line, and a footer (stats / credit).
+// The shared frame: title, status, actions, body, notice, footer.
 function mountUI(el_, title) {
   const host = baEl("div", "browseraudio-widget");
-  // JupyterLab: our key presses are not notebook shortcuts. (Set on the host:
-  // events from inside a shadow root are retargeted to it.)
+  // Suppress JupyterLab shortcuts (shadow-DOM events retarget to the host).
   host.dataset.lmSuppressShortcuts = "true";
   host.dataset.pSuppressShortcuts = "true";
   const shadow = host.attachShadow({ mode: "open" });
@@ -289,7 +276,7 @@ function uiMeter(parent) {
   return {
     el: track,
     set(level) {
-      // ~60 dB of range, so quiet input still moves the bar.
+      // ~60 dB range.
       const db = 20 * Math.log10(Math.max(level, 1e-6));
       fill.style.width = Math.max(0, Math.min(100, ((db + 60) / 60) * 100)) + "%";
     },
@@ -320,7 +307,7 @@ function uiSegmented(parent, options, value, onChange) {
   return api;
 }
 
-// A mini piano (A0..C8 by default) that lights up the sounding notes.
+// Mini piano lighting the sounding notes.
 function uiPiano(parent, lo = 21, hi = 108) {
   const piano = baEl("div", "ba-piano");
   const keys = new Map();
@@ -365,9 +352,7 @@ function uiPiano(parent, lo = 21, hi = 108) {
   };
 }
 
-// Play / Stop + progress for an AudioBuffer (Player, and Recorder's preview).
-// `makeBuffer(ctx)` builds the buffer on demand; `onChange(playing)` reports.
-// The button goes in `buttonParent` (e.g. the header) or starts the row.
+// Play / Stop + progress for an AudioBuffer from makeBuffer(ctx).
 function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, secondary }) {
   const row = baEl("div", "ba-row");
   parent.append(row);
@@ -394,7 +379,7 @@ function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, sec
     source = null;
     cancelAnimationFrame(raf);
     if (was) {
-      // Fade out over a few ms, then stop.
+      // Fade out, then stop.
       const now = ctx.currentTime;
       gain.gain.cancelScheduledValues(now);
       gain.gain.setTargetAtTime(0, now, 0.006);
@@ -431,7 +416,7 @@ function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, sec
     button.set({ icon: "stop", label: "Stop" });
     tick();
     if (onChange) onChange(true);
-    // Autoplay policy: a context created without a click may stay suspended.
+    // Autoplay may leave the context suspended.
     setTimeout(() => {
       if (source === src && ctx.state !== "running") {
         stop();

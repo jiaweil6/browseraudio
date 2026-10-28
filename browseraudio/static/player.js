@@ -1,22 +1,9 @@
-// player.js — anywidget frontend for browseraudio.Player.
-// (Python prepends ui.js, the shared look and controls.)
-//
-// Runs on the MAIN thread, where the Web Audio API lives. The Python kernel
-// that drives this widget may be in a Web Worker (JupyterLite / thebe-lite),
-// which has no access to AudioContext — so Python ships the samples here
-// (channel-major float32 PCM, base64 over the widget comm) and playback
-// happens on this thread.
-//
-// Playback is fire-and-forget: nothing has to return to the kernel, so unlike
-// recording it works in a single cell. Play and Stop work at any moment, from
-// the button or from Python (`playing`). Browsers block audio that starts
-// without a user gesture, so autoplay may be refused — the button always works.
+// player.js — Player frontend: plays planar float32 PCM; Play/Stop from the button or Python.
 
 function render({ model, el }) {
   const ui = mountUI(el, "Player");
 
-  // Build an AudioBuffer from the planar PCM. AudioContext resamples to its
-  // own rate on playback, so an arbitrary sample_rate is fine.
+  // AudioContext resamples, so any sample_rate works.
   function buildBuffer(ctx) {
     if (!model.get("_pcm_b64")) {
       ui.note("Nothing to play.", "info");
@@ -54,7 +41,7 @@ function render({ model, el }) {
     const sr = model.get("sample_rate");
     const nch = Math.max(1, model.get("n_channels"));
     const b64 = model.get("_pcm_b64");
-    // base64 -> bytes -> float32 frames, without decoding the whole buffer.
+    // Frame count from the base64 length.
     const frames = Math.floor((b64.length * 3) / 4 / 4 / nch);
     const seconds = sr ? frames / sr : 0;
     playback.setDuration(seconds);

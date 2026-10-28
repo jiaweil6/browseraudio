@@ -1,16 +1,5 @@
-// keyboard.js — anywidget frontend for browseraudio.Keyboard.
-// (Python prepends ui.js, genie.js and controls.js.)
-//
-// Runs on the MAIN thread, where the Web Audio API lives. Python designs the
-// sound once (a bank of rendered notes, or one wavetable cycle) and ships it
-// here as base64 float32; from then on every key press is voiced right here
-// with no round-trip to the kernel, which may be in a Web Worker (JupyterLite
-// / thebe-lite) and only services widget messages between cells. That keeps
-// key-to-sound latency down to the AudioContext's own output latency.
-//
-// Played notes are batched back to Python as (t, midi, on) events for
-// analysis / offline rendering. The envelope maths mirrors _envelope() in
-// _keyboard.py.
+// keyboard.js — Keyboard frontend: voices the note bank / wavetable in the page and
+// reports played notes as events. The envelope mirrors _envelope() in _keyboard.py.
 
 const FLUSH_MS = 250; // how often played notes are batched back to Python
 const STEAL_RELEASE = 0.03; // fade for a voice stolen past max_voices
@@ -33,8 +22,6 @@ function render({ model, el }) {
   let pending = [];
   let flushTimer = null;
 
-  // ----- sound -----------------------------------------------------------
-
   function buildSound() {
     const pcm = fromBase64(model.get("_pcm_b64"));
     buffers = new Map();
@@ -52,15 +39,12 @@ function render({ model, el }) {
     }
   }
 
-  // Started from a click, a focus or a key press — all user gestures, so the
-  // autoplay policy lets it run. Built on focus rather than on the first
-  // note: setup takes ~100+ ms and would make that note late.
+  // Started on focus (a gesture), so the first note isn't late.
   function start() {
     if (!ctx) {
       ctx = newAudioContext({ latencyHint: "interactive" });
       out = ctx.createGain();
-      // A gentle limiter: chords that add up past full scale are squeezed
-      // instead of hard-clipping into harsh distortion.
+      // Gentle limiter: chords don't hard-clip.
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = -6;
       limiter.knee.value = 6;
@@ -74,8 +58,7 @@ function render({ model, el }) {
     showState();
   }
 
-  // Silence now: release every key, fade the output out over ~10 ms (no
-  // click, even for notes still ringing), and close the audio context.
+  // Release everything, fade out, close.
   function stop() {
     controls.liftAll();
     const [c, o] = [ctx, out];
@@ -108,7 +91,7 @@ function render({ model, el }) {
       source = ctx.createBufferSource();
       source.buffer = wavetable;
       source.loop = true;
-      // One cycle per `length` samples, so this rate sounds at midi's pitch.
+      // `length` samples per cycle.
       source.playbackRate.value = (midiToHz(midi) * wavetable.length) / ctx.sampleRate;
     } else {
       const buf = buffers.get(midi);
@@ -140,13 +123,13 @@ function render({ model, el }) {
     return voice;
   }
 
-  // Release a voice: from its current envelope level down to 0.
+  // Release from the current envelope level.
   function stopVoice(voice, release) {
     if (voice.stopped || voice.ctx !== ctx) return; // already stopped by Stop
     voice.stopped = true;
     const now = ctx.currentTime;
     log(now, voice.midi, 0);
-    // One-shots ring out to their end (and keep counting toward max_voices).
+    // One-shots ring out (and still count toward max_voices).
     if (model.get("one_shot") && release !== STEAL_RELEASE) return;
     active = active.filter((v) => v !== voice);
     const level = model.get("gain") * heldGain(
@@ -159,8 +142,6 @@ function render({ model, el }) {
     voice.source.stop(now + release + 0.02);
   }
 
-  // ----- controls ----------------------------------------------------------
-
   const power = uiButton({ icon: "play", label: "Start", onClick: () => (ctx ? stop() : start()) });
   ui.actions.append(power);
 
@@ -172,7 +153,7 @@ function render({ model, el }) {
       showState();
     },
     onBlur: showState,
-    // Genie mode picks among the notes this keyboard can play.
+    // Genie picks among the bank's notes.
     genieKeys: () =>
       model.get("mode") === "bank" ? model.get("_notes").map(([midi]) => midi - GENIE_LOWEST_MIDI) : null,
   });
