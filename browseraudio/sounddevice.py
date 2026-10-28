@@ -1,32 +1,8 @@
-"""A :mod:`sounddevice`-shaped facade for in-browser Python.
+"""A ``sounddevice``-shaped facade for the browser.
 
-In the browser there is no PortAudio and no OS audio devices, so the usual
-``sounddevice`` stack can't run. This module mimics the slice of the
-``sounddevice`` surface that audio code actually reaches for — ``play``,
-``wait``, ``OutputStream``, ``query_devices``, and ``default`` — backed by the
-Web Audio API via browseraudio's widgets. The goal is that a library can do::
-
-    try:
-        import sounddevice as sd
-    except (OSError, ModuleNotFoundError):
-        import browseraudio.sounddevice as sd
-
-and keep working in JupyterLite / thebe / Pyodide.
-
-**What's drop-in and what isn't.** Playback is genuinely fire-and-forget, so
-:func:`play` / :func:`wait` behave like the real thing. :class:`OutputStream`
-runs a real-time ``callback(outdata, frames, time, status)`` just like
-sounddevice's — the browser pulls each block from the kernel as it plays (see
-:class:`browseraudio.Stream`) — with one rule of its own: blocks are only made
-while no cell is running, so start the stream and let the cell finish rather
-than ``sd.sleep()``-ing inside it. Recording is *not*
-drop-in: :func:`sounddevice.rec` + :func:`wait` is a *blocking* call, but a
-browser kernel can't fill a buffer synchronously within one cell (in a Web
-Worker it can't process the comm reply mid-cell at all, and even on the main
-thread the AudioContext — not the caller — chooses the sample rate and frame
-count). So :func:`rec` raises with guidance toward the two-cell
-:func:`browseraudio.record` flow rather than silently returning garbage or
-hanging. See the project README's roadmap for details.
+``play``, ``wait``, ``OutputStream``, ``query_devices`` and ``default`` work
+as in sounddevice. ``rec`` raises: a browser kernel can't fill a buffer
+synchronously — use :func:`browseraudio.record`.
 """
 
 from __future__ import annotations
@@ -51,15 +27,10 @@ __all__ = [
     "CallbackAbort",
 ]
 
-# The browser's AudioContext picks the true rate at capture time; until then we
-# can only advertise a nominal default. 48 kHz is the common Chromium/Firefox
-# rate. Callers that need the real rate should read it off the recording after
-# the fact (``Recorder.sample_rate``).
+# Advertised rate; the AudioContext decides the real one.
 NOMINAL_SAMPLERATE = 48000
 
-# A synthetic two-entry device table: one input (the mic) and one output (the
-# speakers). Shaped like sounddevice's device dicts so callers that inspect
-# ``name`` / channel counts / ``default_samplerate`` keep working.
+# The mic and the speakers, shaped like sounddevice's device dicts.
 _DEVICES: List[Dict[str, Any]] = [
     {
         "name": "Browser microphone",
@@ -79,12 +50,7 @@ _DEVICES: List[Dict[str, Any]] = [
 
 
 class _Default:
-    """A stand-in for ``sounddevice.default``.
-
-    Only the ``device`` slot is modelled — a ``[input_index, output_index]``
-    pair that callers read (``default.device[0]``) and reassign
-    (``default.device = (in, out)``), just like the real thing.
-    """
+    """Stand-in for ``sounddevice.default`` (``device``, ``samplerate``, ``channels``)."""
 
     def __init__(self) -> None:
         self.device: Any = [0, 1]
@@ -96,7 +62,7 @@ default = _Default()
 
 
 class DeviceList(list):
-    """The device table; prints like sounddevice's (``>`` input, ``<`` output)."""
+    """The device table; prints like sounddevice's."""
 
     def __repr__(self) -> str:
         default_in, default_out = default.device
@@ -132,13 +98,7 @@ def _device_index(device: Any, kind: Optional[str]) -> int:
 def query_devices(
     device: Any = None, kind: Optional[str] = None
 ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
-    """Return the synthetic browser device table, or a single device dict.
-
-    Mirrors ``sounddevice.query_devices``: with no arguments it returns the
-    full table; ``device`` (an index, a name substring, or an ``(input,
-    output)`` pair such as ``default.device``) and/or ``kind`` (``"input"`` /
-    ``"output"``) select one device.
-    """
+    """The device table, or one device by index, name, or ``(in, out)`` pair with ``kind``."""
     if kind not in (None, "input", "output"):
         raise ValueError(f"kind must be 'input' or 'output', got {kind!r}")
     if device is None and kind is None:
@@ -152,22 +112,14 @@ def query_devices(
 
 
 def play(data, samplerate: Optional[int] = None, **kwargs) -> Any:
-    """Play ``data`` through the page's speakers (delegates to :func:`browseraudio.play`).
-
-    Drop-in for ``sounddevice.play``: playback is fire-and-forget, so this works
-    in a single cell. Extra keyword arguments are forwarded to
-    :func:`browseraudio.play` (e.g. ``autoplay``).
-    """
+    """``sounddevice.play``: delegates to :func:`browseraudio.play`."""
     from . import play as _play
 
     return _play(data, samplerate, **kwargs)
 
 
 def wait(ignore_errors: bool = True) -> None:
-    """No-op: browser playback is fire-and-forget, so there's nothing to await.
-
-    Present so that the common ``sd.play(...); sd.wait()`` idiom keeps working.
-    """
+    """No-op: browser playback doesn't block."""
     return None
 
 
@@ -181,14 +133,7 @@ def rec(
     blocking: bool = False,
     **kwargs,
 ) -> np.ndarray:
-    """Not supported in the browser — use the two-cell :func:`browseraudio.record`.
-
-    ``sounddevice.rec`` returns a buffer that fills in the background and is read
-    after :func:`wait`. A browser kernel can't honor that: capture finishes only
-    after a user gesture, the AudioContext (not the caller) decides the sample
-    rate and length, and a Web-Worker kernel can't even process the result
-    mid-cell. Rather than hang or hand back silence, we raise with guidance.
-    """
+    """Not supported in the browser: raises, pointing to :func:`browseraudio.record`."""
     where = (
         "a Web-Worker kernel (JupyterLite / thebe)"
         if in_worker()
@@ -207,20 +152,15 @@ def rec(
 
 
 class CallbackStop(Exception):
-    """Raise in a stream callback to stop the stream (as in sounddevice)."""
+    """Raise in a callback to stop the stream."""
 
 
 class CallbackAbort(Exception):
-    """Raise in a stream callback to abort the stream (as in sounddevice)."""
+    """Raise in a callback to abort the stream."""
 
 
 class CallbackFlags:
-    """The ``status`` passed to a stream callback; falsy when all is well.
-
-    ``output_underflow`` is set when the browser ran out of audio since the
-    previous callback — the kernel didn't answer in time (a busy cell, or a
-    callback slower than real time).
-    """
+    """A callback's ``status``; ``output_underflow`` means the browser ran dry."""
 
     _NAMES = (
         "input_underflow",
@@ -246,28 +186,19 @@ class CallbackFlags:
         return f"<sounddevice.CallbackFlags: {str(self) or 'no flags set'}>"
 
 
-# How a sounddevice ``latency`` maps to the seconds of audio kept queued.
+# sounddevice latency -> seconds queued.
 _LATENCY = {"low": 0.04, "high": 0.1}
 
-# Used when blocksize is 0 / None ("whatever the host likes" in sounddevice).
+# For blocksize 0 / None.
 DEFAULT_BLOCKSIZE = 512
 
 
 class OutputStream:
-    """A ``sounddevice.OutputStream`` that plays through the browser.
+    """``sounddevice.OutputStream`` (callback mode) on a :class:`browseraudio.Stream`.
 
-    ``callback(outdata, frames, time, status)`` fills ``outdata`` — a
-    float32 ``(frames, channels)`` array — block by block, exactly as with
-    sounddevice; raise :class:`CallbackStop` / :class:`CallbackAbort` to end
-    the stream. Under the hood a :class:`browseraudio.Stream` widget (shown by
-    :meth:`start`) pulls each block from the kernel as the browser plays it.
-
-    Differences from sounddevice: ``device`` is accepted and ignored (there is
-    one output, the page's speakers); only ``dtype="float32"`` is supported;
-    blocks are produced only while no cell is running; and ``time`` gives
-    estimates (``currentTime`` and ``outputBufferDacTime``, in seconds since
-    the stream started). If the browser blocks audio that a cell started, the
-    widget shows a button to enable it.
+    ``callback(outdata, frames, time, status)`` as in sounddevice. ``device`` is
+    ignored, only float32 is supported, ``time`` holds estimates, and blocks are
+    only made while no cell runs. :meth:`start` shows the engine widget.
     """
 
     def __init__(
@@ -357,12 +288,12 @@ class OutputStream:
 
     @property
     def active(self) -> bool:
-        """True while the stream is playing."""
+        """True while playing."""
         return not self._closed and self._widget.playing
 
     @property
     def stopped(self) -> bool:
-        """True when the stream is not playing."""
+        """True while not playing."""
         return not self.active
 
     @property
@@ -372,17 +303,17 @@ class OutputStream:
 
     @property
     def cpu_load(self) -> float:
-        """Fraction of real time spent in the callback since the last start."""
+        """Callback time / audio time since the last start."""
         made = self._widget.blocks_rendered * self.blocksize / self.samplerate
         return self._widget.busy / made if made else 0.0
 
     @property
     def widget(self):
-        """The :class:`browseraudio.Stream` widget hosting the audio engine."""
+        """The engine :class:`browseraudio.Stream`."""
         return self._widget
 
     def start(self) -> None:
-        """Start playback, displaying the engine widget the first time."""
+        """Start playback (shows the widget the first time)."""
         if self._closed:
             raise RuntimeError("stream is closed")
         self._dropouts_seen = 0
@@ -395,15 +326,15 @@ class OutputStream:
         self._widget.start()
 
     def stop(self, ignore_errors: bool = True) -> None:
-        """Stop playback (the stream can be started again)."""
+        """Stop playback."""
         self._widget.stop()
 
     def abort(self, ignore_errors: bool = True) -> None:
-        """Stop playback immediately (same as :meth:`stop` in the browser)."""
+        """Same as :meth:`stop`."""
         self._widget.stop()
 
     def close(self, ignore_errors: bool = True) -> None:
-        """Stop playback and remove the engine widget."""
+        """Stop and remove the widget."""
         if self._closed:
             return
         self._widget.stop()

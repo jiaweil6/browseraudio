@@ -90,39 +90,22 @@
     <p class="label">The library · drop-in</p>
     <h2>The sounddevice facade</h2>
     <p>
-      Plenty of audio code already speaks
-      <a href="https://python-sounddevice.readthedocs.io"><code>sounddevice</code></a>. So
-      browseraudio ships <code>browseraudio.sounddevice</code> — a shim with the same shape
+      <code>browseraudio.sounddevice</code> has the shape of
+      <a href="https://python-sounddevice.readthedocs.io"><code>sounddevice</code></a>
       (<code>play</code>, <code>wait</code>, <code>OutputStream</code>, <code>query_devices</code>,
-      <code>default</code>),
-      backed by the page/worker bridge above. A library can fall back to it in the browser and
-      keep running unchanged:
+      <code>default</code>), so libraries can fall back to it:
     </p>
     <pre class="code"><span class="k">try</span>:
     <span class="k">import</span> sounddevice <span class="k">as</span> sd
 <span class="k">except</span> (OSError, ModuleNotFoundError):
-    <span class="k">import</span> browseraudio.sounddevice <span class="k">as</span> sd   <span class="c"># same calls, Web Audio underneath</span></pre>
+    <span class="k">import</span> browseraudio.sounddevice <span class="k">as</span> sd</pre>
     <p>
-      <code>play</code> is genuinely drop-in — it's fire-and-forget, so a single call works.
-      <code>rec</code> is the catch: <code>sd.rec()</code> + <code>sd.wait()</code> is
-      <em>blocking</em>, but the browser can't fill a buffer synchronously — the
-      <code>AudioContext</code> picks the rate, and a worker kernel can't process the reply
-      mid-cell (the <a href="#two-cells">two-cells</a> problem). So the facade's <code>rec</code>
-      raises with a pointer to the two-cell <code>record()</code> flow instead of hanging.
-    </p>
-    <p>
-      <code>OutputStream</code> runs a real-time <code>callback(outdata, frames, time, status)</code>
-      by turning the flow around: the <b>browser is the clock</b>. An <code>AudioWorklet</code>
-      plays a short queue of blocks and, as each one finishes, the page asks the kernel for the
-      next; the kernel answers by running the callback. Because the kernel only <em>reacts</em> to
-      messages, this works in a worker kernel too — blocks (and widget values that steer them) are
-      handled whenever no cell is running. See it on the <a href="realtime.html">Real-time</a> page.
-    </p>
-    <p>
-      On the page's <b>main thread</b> — a bare Pyodide REPL, where the event loop <em>can</em>
-      service the reply — you can also <code>await rec.result()</code> to get a take in one go. In
-      a Web-Worker kernel that would hang, so <code>result()</code> detects the worker and raises
-      immediately rather than leaving you stuck.
+      <code>OutputStream</code> works by making the <b>browser the clock</b>: an
+      <code>AudioWorklet</code> plays a short queue and asks the kernel for each next block,
+      which the kernel answers whenever no cell is running (<a href="realtime.html">demo</a>).
+      <code>rec</code> raises instead: a browser can't fill a buffer synchronously
+      (<a href="#two-cells">two cells</a>). On a bare main-thread Pyodide page,
+      <code>await rec.result()</code> works in one cell.
     </p>
   </section>
 

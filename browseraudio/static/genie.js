@@ -1,19 +1,7 @@
-// genie.js — genie mode: play the piano with 8 buttons, via Piano Genie.
-// (Not a module of its own: Python prepends it to the keyboard widgets'
-// source, see `_bundle()` in _assets.py.)
-//
-// Genie mode is Piano Genie:
-//   Chris Donahue, Ian Simon, Sander Dieleman. "Piano Genie." Proceedings of
-//   the 24th International Conference on Intelligent User Interfaces (IUI),
-//   2019. https://arxiv.org/abs/1810.03226 — https://magenta.tensorflow.org/pianogenie
-//
-// It runs the trained model Magenta publishes (the checkpoint used by the
-// official demo; Apache-2.0) with inference ported from Magenta.js's
-// `piano_genie/model.ts` (Apache-2.0, Copyright Google LLC) to plain JS, so no
-// TensorFlow.js is needed: the network is small enough — a dense input layer,
-// two 128-unit LSTM layers and a dense output over the 88 piano keys — to run
-// in well under a millisecond per note. Only the weights (~1.2 MB) are
-// fetched, once per page.
+// genie.js — genie mode: Piano Genie in plain JS (no TensorFlow.js).
+// Donahue, Simon & Dieleman, "Piano Genie", IUI 2019. https://arxiv.org/abs/1810.03226
+// Inference ported from Magenta.js piano_genie/model.ts (Apache-2.0, Google LLC);
+// runs Magenta's published checkpoint (Apache-2.0).
 
 const GENIE_CHECKPOINT =
   "https://storage.googleapis.com/magentadata/js/checkpoints/piano_genie/model/epiano/stp_iq_auto_contour_dt_166006";
@@ -27,7 +15,7 @@ const GENIE_DT_MAX = 32; // longest delta-time bin
 const GENIE_INPUT = 1 + (GENIE_KEYS + 1) + (GENIE_DT_MAX + 1); // 123 features
 const GENIE_PREFIX = "phero_model/decoder/";
 
-// Round half to even, like tf.round, so delta-time bins match the original.
+// tf.round: half to even.
 function roundHalfEven(x) {
   const r = Math.round(x);
   return Math.abs(x % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r;
@@ -35,7 +23,7 @@ function roundHalfEven(x) {
 
 const sigmoid = (x) => 1 / (1 + Math.exp(-x));
 
-// out[j] = bias[j] + sum_i x[i] * kernel[i, j]  (kernel row-major [n, m])
+// out = bias + x @ kernel (kernel row-major [n, m]).
 function dense(x, kernel, bias, m) {
   const out = Float32Array.from(bias);
   for (let i = 0; i < x.length; i++) {
@@ -60,7 +48,7 @@ function lstmCell(input, c, h, kernel, bias) {
   return [c2, h2];
 }
 
-// Fetch a tfjs weights manifest + shards into named Float32Arrays.
+// Load a tfjs weights manifest into named Float32Arrays.
 async function loadGenieWeights(url) {
   const res = await fetch(url + "/weights_manifest.json");
   if (!res.ok) throw new Error("couldn't load the Piano Genie model (" + res.status + ")");
@@ -91,7 +79,7 @@ async function loadGenieWeights(url) {
   return vars;
 }
 
-// One download per page, shared by every widget (and every view of one).
+// One download per page.
 function genieWeights(url) {
   const cache = (globalThis.__browseraudioGenie = globalThis.__browseraudioGenie || new Map());
   if (!cache.has(url)) {
@@ -131,8 +119,7 @@ class Genie {
     this.lastTime = null; // first press counts as a long pause
   }
 
-  // Advance the model by one button press and return its 88 logits.
-  // `deltaTime` (seconds since the previous press) defaults to the real time.
+  // One press -> 88 logits; deltaTime defaults to the time since the last press.
   step(button, deltaTime) {
     const now = performance.now();
     let dt = deltaTime;
@@ -142,7 +129,7 @@ class Genie {
     const x = new Float32Array(GENIE_INPUT);
     x[0] = (2 * button) / (GENIE_BUTTONS - 1) - 1;
     x[1 + this.lastKey + 1] = 1;
-    // In float32, as the original does, so presses on a bin boundary agree.
+    // float32, as the original.
     const bin = Math.min(roundHalfEven(Math.fround(Math.fround(dt) * GENIE_DT_RATE)), GENIE_DT_MAX);
     x[1 + GENIE_KEYS + 1 + bin] = 1;
 
@@ -154,8 +141,7 @@ class Genie {
     return dense(this.h[GENIE_LAYERS - 1], this.outKernel, this.outBias, GENIE_KEYS);
   }
 
-  // Press button 0..7; returns the piano key (0..87) the genie plays.
-  // temperature 0 is greedy; `keys` limits the choice to those piano keys.
+  // Press button 0..7 -> piano key 0..87. temperature 0 is greedy; `keys` restricts.
   next(button, { temperature = 0.25, keys = null, deltaTime } = {}) {
     const logits = this.step(button, deltaTime);
     const choices = keys && keys.length ? keys : null;

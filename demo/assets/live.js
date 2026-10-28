@@ -1,30 +1,10 @@
-// live.js — boots a REAL in-browser Python kernel for the interactive pages
-// (record.html and play.html).
-//
-// Both pages run the actual browseraudio package on a thebe + thebe-lite +
-// Pyodide kernel, exactly as it would in JupyterLite / thebe: record() displays
-// an anywidget Recorder whose samples come back to Python over the widget comm,
-// and play() displays a Player that receives a NumPy buffer the other way.
-//
-// Design mirrors icmbook's live-cells.js, slimmed for this demo's simple DOM:
-//   - On page load: mount editors over the .cell <pre> blocks (CodeMirror),
-//     styled to match via live.css. The kernel does NOT boot yet — bootstrap's
-//     server start is parked behind a gate so Pyodide/the 25 MB stack load only
-//     on the first Run.
-//   - On first Run: load thebe-lite, open the gate (injecting the pinned
-//     Pyodide + self-hosted piplite settings), await the kernel, micropip-install
-//     browseraudio, then execute cells. thebe renders outputs — including the
-//     Recorder / Player widgets — which we relocate into each cell's .cell-out
-//     area.
-//
-// NOTE: the widgets actually rendering in thebe-lite can only be confirmed in a
-// real browser over a secure context (and, for Record, with a microphone) — see
-// "Run it locally" in demo/README.md.
+// live.js — runs the demo cells on a real thebe-lite + Pyodide kernel. Editors mount
+// on load; the kernel (~25 MB) boots on the first Run, installs browseraudio, and
+// thebe's outputs are moved into each cell's .cell-out box.
 (function () {
   "use strict";
 
-  // Everything is addressed relative to the page's own directory, so the demo
-  // works at any path / static host.
+  // Paths relative to the page, so the demo works on any static host.
   var BASE = new URL(".", document.baseURI).href;
   var url = function (p) { return new URL(p, BASE).href; };
 
@@ -35,9 +15,8 @@
   var sessionRef = null;
   var ranIds = Object.create(null); // thebe cell ids executed since boot
 
-  // Pin the kernel runtime, self-hosting piplite's wheels next to the bundle
-  // (same versions icmbook ships). Pyodide 0.27.7: pyquist/numpy>=2 need >=0.27,
-  // and pyodide_kernel 0.4.7 (in thebe-lite 0.5.0) breaks on >=0.28.
+  // Pinned runtime: pyquist / numpy>=2 need Pyodide >= 0.27; pyodide_kernel 0.4.7
+  // (thebe-lite 0.5.0) breaks on >= 0.28. piplite wheels are self-hosted.
   var liteSettings = {
     "@jupyterlite/pyodide-kernel-extension:kernel": {
       pyodideUrl: "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js",
@@ -74,24 +53,18 @@
       useBinder: false,
       requestKernel: true,
       kernelOptions: { name: "python", path: "/" },
-      // We drive execution from the page's own Run buttons.
       mountRunButton: false,
       mountRunAllButton: false,
       mountRestartButton: false,
       mountRestartallButton: false,
       mountRestartAllButton: false,
-      // The classic thebe contract: each element marked data-executable (the
-      // cell's <pre>, tagged in mount()) becomes a live editor + output area.
+      // Each [data-executable] <pre> becomes a live editor + output area.
       selector: "[data-executable]",
-      // No line numbers — the demo's static blocks had none.
       codeMirrorConfig: { readOnly: false, lineNumbers: false },
     };
   }
 
-  // ----- mount editors (no kernel yet) -----------------------------------
-
   async function mount() {
-    // Mark each cell's source <pre> executable, the way thebe expects.
     cells().forEach(function (cell) {
       var pre = cell.querySelector("pre.cell-code");
       if (!pre) return;
@@ -99,10 +72,8 @@
       pre.setAttribute("data-language", "python");
     });
 
-    // The gate: bootstrap() starts the JupyterLite server immediately, which
-    // needs window.thebeLite. This placeholder satisfies that and parks the
-    // start on a promise we only resolve on the first Run — so the mount is
-    // free of Pyodide and the ~25 MB stack.
+    // bootstrap() starts the JupyterLite server at once; park it behind a gate
+    // opened on the first Run, so loading the page doesn't load Pyodide.
     var gate = new Promise(function (resolve) { openGate = resolve; });
     window.thebeLite = {
       startJupyterLiteServer: function (cfg) {
@@ -117,8 +88,7 @@
     bootPromise.catch(function (e) { console.error("[live] bootstrap", e); });
 
     await waitForEditors();
-    // Output areas are relocated lazily, only once a cell has run — so empty
-    // "output" boxes don't show under unrun cells.
+    // Output boxes appear only once a cell has run.
     setStatus("ready — click Run to start Python", false);
   }
 
@@ -134,9 +104,7 @@
     });
   }
 
-  // thebe renders a cell's live output into a .jp-OutputArea it creates inside
-  // the cell. Move it into the page's own .cell-out box so results sit where the
-  // design puts them (and pick up the widget/audio styling in style.css).
+  // Move thebe's output area into the page's .cell-out box.
   function placeOutput(cell) {
     var out = cell.querySelector(".cell-out");
     var area = cell.querySelector(".jp-OutputArea");
@@ -144,8 +112,6 @@
     out.hidden = false;
     out.appendChild(area);
   }
-
-  // ----- kernel boot (first Run) -----------------------------------------
 
   function ensureKernel() {
     if (!kernelPromise) {
@@ -161,9 +127,7 @@
     setStatus("starting Python — first run downloads ~25 MB…", true);
     await loadScript(url("vendor/thebe-dist/lite/thebe-lite.min.js"));
 
-    // The lite bundle just installed the real startJupyterLiteServer over our
-    // placeholder; opening the gate hands the parked call a wrapper that injects
-    // the pinned runtime settings into the real start.
+    // Open the gate with the real start, plus the pinned runtime settings.
     var realStart = window.thebeLite.startJupyterLiteServer;
     openGate(function (cfg) {
       cfg = Object.assign({}, cfg);
@@ -178,7 +142,7 @@
     setStatus("installing browseraudio…", true);
     await installBrowseraudio();
 
-    // Leaving now would drop kernel state; reload is the reset affordance.
+    // Leaving drops kernel state; reload resets.
     window.addEventListener("beforeunload", function (e) {
       e.preventDefault();
       e.returnValue = "";
@@ -186,10 +150,7 @@
     setStatus("● Python connected — reload page to reset", false);
   }
 
-  // The deploy workflow builds the repo's own wheel into wheels/ and names it
-  // in wheels/manifest.json, so the site demos the code it was deployed from
-  // (including features not yet on PyPI). Without a manifest — e.g. a plain
-  // local checkout — fall back to the latest PyPI release.
+  // Prefer the wheel built from this deploy (wheels/manifest.json); else PyPI.
   async function browseraudioSpec() {
     try {
       var res = await fetch(url("wheels/manifest.json"), { cache: "no-store" });
@@ -206,9 +167,7 @@
   async function installBrowseraudio() {
     var spec = await browseraudioSpec();
     var lines = [
-      // Pre-load the WASM build of numpy so micropip doesn't reach for a PyPI
-      // wheel that needs native libraries, then pull browseraudio (+ anywidget,
-      // from PyPI).
+      // Load Pyodide's numpy first so micropip doesn't fetch a native wheel.
       "import pyodide_js",
       "from pyodide.ffi import to_js",
       'await pyodide_js.loadPackage(to_js(["numpy"]))',
@@ -231,8 +190,6 @@
     }
   }
 
-  // ----- execution -------------------------------------------------------
-
   function nbCellOf(cell) {
     var marked = cell.querySelector("[data-thebe-id]");
     if (!marked || !nbRef) return null;
@@ -240,8 +197,7 @@
     return nbRef.cells.find(function (c) { return c.id === id; }) || null;
   }
 
-  // Run the target cell, first running any earlier cells not yet run this
-  // session (a fresh kernel can't satisfy `rec.samples` otherwise).
+  // Run the target cell, after any earlier cells not yet run.
   async function runUpTo(targetCell) {
     await ensureKernel();
     var chain = cells();

@@ -1,4 +1,4 @@
-"""The real-time Stream widget: a block callback driven by the browser's clock."""
+"""Stream: a block callback played in real time, paced by the browser."""
 
 from __future__ import annotations
 
@@ -15,12 +15,7 @@ from ._pcm import encode_f32
 
 
 class Block(np.ndarray):
-    """A zeroed ``(block_size, channels)`` float32 buffer with a ``.sample_rate``.
-
-    Shaped like a ``pyquist.Audio`` block, so a pyquist-style callback that
-    reads ``len(block)`` / ``block.sample_rate`` and fills ``block[:]`` works
-    unchanged.
-    """
+    """Zeroed float32 ``(block_size, channels)`` with ``.sample_rate`` (pyquist-shaped)."""
 
     sample_rate: int
 
@@ -34,60 +29,24 @@ class Block(np.ndarray):
 
 
 class Stream(anywidget.AnyWidget):
-    """Real-time synthesis: the browser asks Python for audio, block by block.
+    """Real-time synthesis: the browser pulls blocks from ``callback(block)``.
 
-    ``callback(block)`` fills one block of ``block_size`` frames — the
-    pyquist audio-callback contract. Press **Start** (or call :meth:`start`)
-    and the page's audio
-    thread pulls blocks as it plays them, keeping about ``lookahead`` seconds
-    of audio queued (at least two blocks); each block is synthesised by your
-    callback in the kernel at that moment. Key presses on the widget call ``on_note(midi, is_on)`` right
-    away, so a change of control (e.g. ``synth.pitch``) is heard from the
-    next block Python renders::
-
-        synth = Sinusoid()   # its callback glides to silence while `on` is False
-
-        def on_note(midi, on):
-            if on:
-                synth.pitch, synth.on = midi, True
-            elif midi == synth.pitch:   # the sounding key was released
-                synth.on = False
-
-        stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
-
-    Play with musical typing (``input="keys"``) or in **genie mode**
-    (``input="genie"``): 8 buttons whose notes are chosen by Piano Genie
-    (Donahue, Simon & Dieleman, IUI 2019); ``on_note`` receives the notes
-    either way.
-
-    The control-to-sound latency is about the queued audio (``lookahead``,
-    rounded up to whole blocks) plus one kernel round trip; the widget shows
-    the live numbers. Small blocks cost more callback calls per second (the
-    "time budget"), big blocks more latency — B = 1 and B = 16384 both run,
-    and both show why. Blocks are produced only while the kernel is idle (no cell
-    running), so a long-running cell makes the stream drop out.
+    An AudioWorklet keeps ~``lookahead`` seconds queued and asks the kernel for
+    each next block, so a control change (``on_note``, any widget) is heard
+    after the queue plus one round trip. Blocks are only made while no cell
+    runs. ``input="genie"`` plays via Piano Genie.
 
     Attributes:
-        callback: Called as ``callback(block)`` with a zeroed :class:`Block`;
-            fill it in place (or return an array of the same shape).
-        on_note: Called as ``on_note(midi, is_on)`` for each key press/release.
-        sample_rate: The AudioContext's rate, in Hz.
-        block_size: Frames per block (B).
-        channels: Output channels.
-        lookahead: Seconds of audio kept queued in the browser (rounded up
-            to whole blocks, minimum two). Below the kernel round trip, the
-            stream drops out.
-        playing: Whether the stream is running; set by the Start/Stop button
-            or by :meth:`start` / :meth:`stop`.
-        keyboard: Show the computer-keyboard control surface.
-        input: ``"keys"`` (musical typing) or ``"genie"`` (genie mode).
-        genie_temperature: Genie mode's sampling temperature, 0 to 1.
-        genie_range: Lowest and highest MIDI note genie mode may play.
-        genie_checkpoint: URL of the Piano Genie model (Magenta's by default).
-        error: The last callback error (the stream stops on one), else ``""``.
-        blocks_rendered: Blocks synthesised since the last start.
-        busy: Seconds spent in ``callback`` since the last start.
-        dropouts: Times the browser ran out of audio since the last start.
+        callback: ``callback(block)`` fills a zeroed :class:`Block` (or returns one).
+        on_note: ``on_note(midi, is_on)`` per key press / release.
+        sample_rate, block_size, channels: The stream's format.
+        lookahead: Seconds queued in the browser (whole blocks, at least two).
+        playing: Synced with the Start/Stop button; see :meth:`start` / :meth:`stop`.
+        keyboard: Show the key surface.
+        input: ``"keys"`` or ``"genie"``.
+        genie_temperature, genie_range, genie_checkpoint: Genie-mode settings.
+        error: Last callback error (stops the stream), else ``""``.
+        blocks_rendered, busy, dropouts: Counters since the last start.
     """
 
     _esm = _bundle("ui.js", "genie.js", "controls.js", "stream.js")
@@ -123,7 +82,7 @@ class Stream(anywidget.AnyWidget):
     ):
         if not callable(callback):
             raise TypeError("callback must be callable, as callback(block)")
-        # The range every browser's AudioContext constructor accepts.
+        # What every browser's AudioContext accepts.
         if not 3000 <= sample_rate <= 768000:
             raise ValueError(f"sample_rate must be in 3000..768000 Hz, got {sample_rate}")
         if block_size < 1:
@@ -157,7 +116,7 @@ class Stream(anywidget.AnyWidget):
         self.on_msg(self._on_frontend_msg)
 
     def start(self) -> None:
-        """Start (or resume) playback, as if Start were pressed."""
+        """Start playback."""
         self.error = ""
         self.playing = True
 
@@ -188,7 +147,7 @@ class Stream(anywidget.AnyWidget):
                 self._fail(f"on_note: {type(err).__name__}: {err}")
 
     def render_block(self) -> np.ndarray:
-        """Run the callback once; return its block as float32 ``(B, channels)``."""
+        """Run the callback once; return float32 ``(block_size, channels)``."""
         block = Block(self.block_size, self.channels, self.sample_rate)
         out = self.callback(block)
         arr = np.asarray(block if out is None else out, dtype=np.float32)
@@ -204,8 +163,7 @@ class Stream(anywidget.AnyWidget):
             return
         start = time.perf_counter()
         try:
-            # Each block planar (channel-major), like Player — what the
-            # worklet reads — and the blocks back to back in one payload.
+            # Blocks back to back, each planar (what the worklet reads).
             blocks = np.stack([self.render_block().T for _ in range(n)])
         except Exception as err:
             self._fail(f"callback: {type(err).__name__}: {err}")
@@ -224,11 +182,7 @@ def stream(
     block_size: int = 512,
     **kwargs,
 ) -> Stream:
-    """Create, display, and return a :class:`Stream` for ``callback``.
-
-    Press **Start** on the widget to begin real-time playback, and play the
-    keys to send ``on_note(midi, is_on)`` to Python. See :class:`Stream`.
-    """
+    """Display a :class:`Stream` for ``callback`` and return it."""
     from IPython.display import display
 
     s = Stream(callback, sample_rate, block_size, **kwargs)

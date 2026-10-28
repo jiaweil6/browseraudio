@@ -32,11 +32,9 @@
   </p>
 
   <p class="callout">
-    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) and
-    <code>micropip</code>-installs the actual <code>browseraudio</code> package — so the
-    cells below are the genuine API, not a mock, just like
-    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the
-    first <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
+    Runs the real <code>browseraudio</code> on an in-browser Python kernel
+    (<a href="how-it-works.html">thebe + Pyodide</a>). Cells are editable; the first
+    <b>Run</b> downloads ~25 MB. Reload to reset.
   </p>
 
   <div class="runbar">
@@ -46,9 +44,8 @@
 
   <div class="step-h"><span class="n">01</span><h2>Record three seconds</h2></div>
   <p>
-    Run the cell, click <b>● Record</b>, and allow the microphone. Press <b>Stop</b> any time to
-    keep what you have; then <b>Play</b> hears the take. Sing or hum one steady note — the next
-    cells turn it into an instrument.
+    Click <b>● Record</b> and allow the mic; <b>Stop</b> early keeps the take. Hum one
+    steady note: cell 03 turns it into an instrument.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="record">▶ Run</button></div>
@@ -60,25 +57,19 @@ rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c
 
   <div class="step-h"><span class="n">02</span><h2>Inspect the array</h2></div>
   <p>
-    The take is an ordinary NumPy array — float32, shape <code>(n_frames, 1)</code> — that you can
-    slice, plot, or hand to a DSP library.
+    Float32, shape <code>(n_frames, 1)</code>. Read it in a later cell than the
+    recorder (<a href="how-it-works.html#two-cells">why</a>).
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="inspect">▶ Run</button></div>
 <pre class="cell-code"><code>rec.samples.shape, rec.sample_rate</code></pre>
     <div class="cell-out" data-out="inspect" hidden></div>
   </div>
-  <p class="callout">
-    <b>In a notebook, this is two cells.</b> Recording finishes <em>after</em> the cell that calls
-    <code>record()</code> returns, so you read <code>rec.samples</code> in the next cell —
-    <a href="how-it-works.html#two-cells">why</a>.
-  </p>
 
   <div class="step-h"><span class="n">03</span><h2>Your voice as an instrument</h2></div>
   <p>
-    A sampler in a dozen lines: every key plays your take, read faster for higher notes and
-    slower for lower ones (it's treated as middle C). Click the keyboard and play a chord of
-    yourself — or switch to <b>Genie</b> and let the genie sing.
+    Each key plays your take faster or slower (it counts as middle C). Play a chord of
+    yourself, or switch to <b>Genie</b>.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="voice">▶ Run</button></div>

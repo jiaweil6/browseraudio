@@ -7,66 +7,25 @@ All notable changes to **browseraudio** are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- No clicks from browseraudio itself: streams fade over dropouts (the
-  worklet lets the last sample decay and fades back in) and on Stop; Player /
-  Recorder previews fade in and out; Keyboard fades out on Stop, fades stolen
-  voices over 30 ms, fades each rendered note's last 5 ms, and has a gentle
-  output limiter so chords don't hard-clip.
-- `KeyMap(..., labels=[...])`: name the keys (e.g. drum pads) instead of
-  showing note names.
-- New demos: a polyphonic synth with envelopes, FM with live sliders,
-  Karplus–Strong strings in genie mode, a synthesized drum kit, and your
-  recorded voice as an instrument; the stateful-sine demo now glides instead of
-  clicking.
-- **Genie mode** on the keyboard widgets (`Keyboard`, `Stream`): `input="genie"`
-  or the widget's Keys | Genie control turns 8 buttons (`1`–`8` or
-  `A S D F J K L ;`) into piano music with
+- `stream()` / `Stream`: real-time synthesis; the browser pulls blocks from a
+  `callback(block)`, with live latency and load stats.
+- `sounddevice.OutputStream` (callback mode), `CallbackStop`/`CallbackAbort`/`CallbackFlags`.
+- `keyboard()` / `Keyboard` and `KeyMap` (with `labels`): synths designed in NumPy,
+  played polyphonically in the page.
+- Genie mode (`input="genie"`): play with 8 buttons via
   [Piano Genie](https://magenta.tensorflow.org/pianogenie) (Donahue, Simon &
-  Dieleman, IUI 2019), credited in the widget. Runs Magenta's published model
-  with inference ported to plain JavaScript (no TensorFlow.js); `Keyboard` keeps
-  the genie within its rendered notes, `Stream` within `genie_range`.
-  `genie_temperature` and `genie_checkpoint` (self-hosting) are configurable.
-- One widget family: every widget shares a look (title, status, transport,
-  stats), renders in a Shadow DOM so host CSS can't restyle it, and follows the
-  JupyterLab / JupyterLite theme or — on other pages such as thebe sites — the
-  page's own text colour and font, in light and dark.
-- Start/stop at any moment: `Player` gets Play/Stop with progress, plus
-  `play()` / `stop()` / `playing` in Python; `Recorder` can stop a take early
-  (keeping what was captured), shows a live input meter, and previews the take
-  with Play/Stop; `Keyboard` gets Start/Stop.
-- `stream(callback, sample_rate, block_size)` / `Stream` — real-time synthesis.
-  The browser is the clock: an `AudioWorklet` plays a short queue of blocks and
-  pulls each next one from a pyquist-style `callback(block)` running in the
-  kernel, so it works in Web-Worker kernels (JupyterLite / thebe) too. Key
-  presses on the widget call `on_note(midi, is_on)` right away; the widget shows
-  block size, queue, kernel round trip, callback time budget, dropouts and the
-  resulting key-to-sound latency. Blocks travel in batches, so tiny and huge
-  block sizes both run.
-- `browseraudio.sounddevice.OutputStream` — a callback-mode
-  `sounddevice.OutputStream` built on `Stream`, with `CallbackStop`,
-  `CallbackAbort` and `CallbackFlags` (browser dropouts arrive as
-  `output_underflow`). Real-time `sounddevice` code, including course support
-  modules with their own widgets, runs unchanged with the facade registered as
-  `sounddevice`.
-- `keyboard(render, sample_rate)` / `Keyboard` — a synth designed in NumPy ahead
-  of time (a note bank or a looped wavetable with ADSR) and voiced entirely in
-  the browser, with the performance logged back as `events` and re-rendered by
-  `render()`.
-- `KeyMap` — computer-key → MIDI mapping as a small state machine (musical
-  typing by default, with octave keys; context-dependent mappings fit too).
-- Demo pages `synth.html` (the keyboard synth) and `realtime.html` (a block
-  callback run live: state between blocks, block size vs. latency, a wavetable
-  synth, and a sounddevice `OutputStream` steered by a slider).
+  Dieleman, IUI 2019), run in plain JS.
+- One widget look (Shadow DOM, Jupyter or host-page theming); start/stop on every
+  widget (`Player.play()`/`stop()`, Recorder stop-early and preview).
+- No clicks: fades on Stop, dropouts and note ends; a limiter on Keyboard.
+- Demo pages: synth, real-time, voice instrument.
 
 ### Changed
-- `sounddevice.query_devices` resolves `(input, output)` pairs with `kind=`,
-  name substrings and `kind`-only lookups, and the table prints like
-  sounddevice's.
-- The demo site installs the wheel built from its own commit (falling back to
-  PyPI), so it can show unreleased features.
+- `sounddevice.query_devices` accepts `(input, output)` pairs with `kind=` and names.
+- The demo site installs the wheel built from its own commit.
 
 ### Fixed
-- CI: pin the test runner to Ubuntu 24.04, which still has Python 3.9.
+- CI runs on Ubuntu 24.04 (Python 3.9 is unavailable on 26.04).
 
 ## [0.3.0] — 2026-06-24
 

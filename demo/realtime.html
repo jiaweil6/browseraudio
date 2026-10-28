@@ -27,16 +27,14 @@
   <p class="label">Feature · Real-time</p>
   <h1>Real-time synthesis, block by block</h1>
   <p class="lead">
-    A sound card doesn't take a whole song at once: it keeps asking for the next short
-    <b>block</b> of samples, and a <b>callback</b> must fill each one in time. Here the
-    browser is the sound card and your NumPy callback answers it — live, while you play.
+    The browser asks for audio one <b>block</b> at a time; your NumPy <b>callback</b>
+    fills each one, live, while you play.
   </p>
 
   <p class="callout">
-    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) with the actual
-    <code>browseraudio</code> package — so the cells below are the genuine API, just like
-    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the first
-    <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
+    Runs the real <code>browseraudio</code> on an in-browser Python kernel
+    (<a href="how-it-works.html">thebe + Pyodide</a>). Cells are editable; the first
+    <b>Run</b> downloads ~25 MB. Reload to reset.
   </p>
 
   <div class="runbar">
@@ -46,13 +44,10 @@
 
   <div class="step-h"><span class="n">01</span><h2>A callback with state</h2></div>
   <p>
-    The control (the pitch) is read once per block, and the phase is <b>state</b>, carried
-    from block to block so the sine never jumps. The amplitude is state too: each block glides
-    from the last level to the new one — <b>de-zippering</b> — so notes start and stop without a
-    click. Run the cell, press <b>▶ Start</b>, click the keyboard, then hold keys:
-    <code>A S D F G H J K L ;</code> are the white keys, <code>W E T Y U O P</code> the black
-    keys, <code>Z</code> / <code>X</code> shift the octave. One sine, one note at a time: a new key
-    takes over.
+    The pitch is read once per block; phase and amplitude carry over between blocks,
+    and the amplitude glides (de-zippering) so notes don't click. Run, press <b>▶ Start</b>,
+    click the keyboard and hold keys: <code>A S D F …</code> white, <code>W E T …</code>
+    black, <code>Z</code>/<code>X</code> octave. One voice: a new key takes over.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-sine">▶ Run</button></div>
@@ -89,18 +84,14 @@ s = <span class="f">stream</span>(synth.callback, sample_rate=SR, block_size=<sp
     <div class="cell-out" data-out="rt-sine" hidden></div>
   </div>
   <p class="callout">
-    Python never keeps time here: the page's audio thread plays a short queue of blocks and asks
-    the kernel for the next one as each finishes. So a key press is heard after the
-    <b>queued audio</b> plus one <b>round trip</b> to the kernel — the widget shows both, live.
+    The browser asks the kernel for each next block, so a key is heard after the
+    <b>queue</b> plus one <b>round trip</b>; the widget shows both.
   </p>
 
   <div class="step-h"><span class="n">02</span><h2>Block size: time budget vs. latency</h2></div>
   <p>
-    Every block must be ready before the one ahead of it finishes playing. Small blocks mean
-    many callback calls per second — watch <b>% of budget</b> climb at <code>B = 1</code>. Big
-    blocks are cheap, but your key presses wait behind them — at <code>B = 16384</code> notes
-    arrive late and quick ones are skipped entirely. Change the size, run the cell, and press
-    <b>▶ Start</b> again.
+    Small blocks cost more callback calls (<code>B = 1</code>: watch <b>% of budget</b>);
+    big ones delay your keys (<code>B = 16384</code>). Run, then press <b>▶ Start</b> again.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-blocksize">▶ Run</button></div>
@@ -110,11 +101,8 @@ s = <span class="f">stream</span>(synth.callback, sample_rate=SR, block_size=<sp
 
   <div class="step-h"><span class="n">03</span><h2>Polyphony: one voice per key</h2></div>
   <p>
-    Real instruments play chords. Give every held key its own <b>voice</b> — here a
-    wavetable read at the note's speed — shaped by an <b>envelope</b> that glides up when the key
-    goes down (attack) and fades away after it's released (release). The callback mixes all
-    sounding voices, and a soft clip (<code>tanh</code>) keeps big chords from distorting. Hold
-    several keys at once.
+    Each held key gets a voice with an attack/release envelope; the callback mixes them
+    and soft-clips. Hold a chord.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-poly">▶ Run</button></div>
@@ -172,13 +160,10 @@ s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<spa
     <div class="cell-out" data-out="rt-poly" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">04</span><h2>Genie mode: 8 buttons, a whole piano</h2></div>
+  <div class="step-h"><span class="n">04</span><h2>Genie mode</h2></div>
   <p>
-    The same polyphonic synth in <b>genie mode</b>: eight buttons (<code>1</code>–<code>8</code>
-    or <code>A S D F J K L ;</code>), and a neural network decides which piano key each press
-    becomes — lower buttons lower, higher buttons higher. Your <code>on_note</code> receives the
-    genie's notes, so nothing else changes. Every stream above has the <b>Keys | Genie</b> switch
-    too.
+    The same synth, played with eight buttons (<code>1</code>–<code>8</code> or
+    <code>A S D F J K L ;</code>): a neural network picks the piano keys.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-genie">▶ Run</button></div>
@@ -198,11 +183,8 @@ s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<spa
 
   <div class="step-h"><span class="n">05</span><h2>FM synthesis, with live knobs</h2></div>
   <p>
-    Swap the voice: <b>frequency modulation</b> wobbles a sine's phase with another sine,
-    which grows a whole family of overtones from two oscillators. The sliders are read once per
-    block while you play — move <b>index</b> for brightness and <b>ratio</b> for the character
-    (whole numbers sound tonal, halves bell-like). The index is de-zippered, so turning it never
-    clicks.
+    A sine whose phase is wobbled by another sine. The sliders are read every block:
+    <b>index</b> for brightness, <b>ratio</b> for character.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-fm">▶ Run</button></div>
@@ -235,11 +217,8 @@ widgets.<span class="f">VBox</span>([ratio, index])</code></pre>
 
   <div class="step-h"><span class="n">06</span><h2>sounddevice code, and any widget as a control</h2></div>
   <p>
-    Code written for <code>sounddevice.OutputStream</code> runs too: its
-    <code>callback(outdata, frames, time, status)</code> is pulled the same way. Any widget can
-    steer it — its value reaches the kernel between blocks. Moving the slider multiplies the
-    tone by a <b>ramp</b> from the previous level to the new one (de-zippering), so the volume
-    glides instead of clicking.
+    A <code>sounddevice.OutputStream</code> callback, with a slider as a de-zippered
+    volume fader.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-outputstream">▶ Run</button></div>
@@ -265,8 +244,7 @@ level</code></pre>
     <div class="cell-out" data-out="rt-outputstream" hidden></div>
   </div>
   <p class="callout">
-    Blocks are made only while no cell is running, so keep long computations out of the way
-    while a stream plays — a busy kernel is heard as dropouts.
+    Blocks are only made while no cell runs: a busy kernel is heard as dropouts.
   </p>
 
   <hr class="rule" />

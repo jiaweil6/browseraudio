@@ -1,16 +1,5 @@
-// recorder.js — anywidget frontend for browseraudio.Recorder.
-// (Python prepends ui.js, the shared look and controls.)
-//
-// Runs on the MAIN thread, where the Web Audio API and getUserMedia live.
-// The Python kernel that drives this widget may be in a Web Worker
-// (JupyterLite / thebe-lite), which has no access to those APIs — so the
-// capture happens here and the samples are handed back to Python over the
-// widget comm channel (base64-encoded float32 PCM). Record and Stop work at
-// any moment: stopping early keeps what was captured so far. The take can be
-// previewed right away with the Play button.
-//
-// Capture uses ScriptProcessorNode: deprecated but universally supported and
-// dependency-free. A future version should move to an AudioWorklet.
+// recorder.js — Recorder frontend: mic capture (ScriptProcessorNode), stop early,
+// preview; samples go to Python as base64 float32.
 
 function toBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -116,9 +105,7 @@ function render({ model, el }) {
       processor.disconnect();
       source.disconnect();
 
-      // ScriptProcessor delivers fixed 4096-sample blocks, so `total` overshoots
-      // the request by up to one block. Trim to exactly the requested duration
-      // (or to what was captured, if stopped early / the safety timeout fired).
+      // Trim to the requested length (or what was captured).
       const length = Math.min(total, target);
       const pcm = new Float32Array(length);
       let offset = 0;

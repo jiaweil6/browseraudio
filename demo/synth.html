@@ -32,10 +32,9 @@
   </p>
 
   <p class="callout">
-    This page runs a <b>real in-browser Python kernel</b> (thebe + Pyodide) with the actual
-    <code>browseraudio</code> package — so the cells below are the genuine API, just like
-    <a href="how-it-works.html">JupyterLite / thebe</a>. The cells are editable; the first
-    <b>Run</b> downloads the runtime (~25 MB), so give it a moment. Reload to reset.
+    Runs the real <code>browseraudio</code> on an in-browser Python kernel
+    (<a href="how-it-works.html">thebe + Pyodide</a>). Cells are editable; the first
+    <b>Run</b> downloads ~25 MB. Reload to reset.
   </p>
 
   <div class="runbar">
@@ -45,12 +44,9 @@
 
   <div class="step-h"><span class="n">01</span><h2>Design a sound, then play it</h2></div>
   <p>
-    A function from frequency to samples — a few harmonics, the higher ones dying faster, for
-    an electric-piano-ish tone. Python renders it once for every note the keyboard can reach,
-    then hands the bank to the page, which plays it with <b>no round trip</b> to Python — as
-    many notes at once as you like. <b>Click the keyboard</b>, then play:
-    <code>A S D F G H J K L ;</code> are the white keys, <code>W E T Y U O P</code> the black
-    keys, and <code>Z</code> / <code>X</code> shift the octave.
+    A function from frequency to samples, rendered once per note and played in the page:
+    no round trip, any number of notes at once. Click the keyboard and play
+    (<code>Z</code>/<code>X</code> change octave).
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-pluck">▶ Run</button></div>
@@ -69,16 +65,10 @@ t = np.<span class="f">arange</span>(<span class="f">int</span>(<span class="n">
 kb = <span class="f">keyboard</span>(pluck, sr, release=<span class="n">0.3</span>)</code></pre>
     <div class="cell-out" data-out="synth-pluck" hidden></div>
   </div>
-  <p class="callout">
-    Your key presses never wait on Python: the sound is already in the page, so notes start as
-    fast as the browser's audio output allows. Python hears about them afterwards, as
-    <code>kb.events</code>.
-  </p>
 
   <div class="step-h"><span class="n">02</span><h2>A wavetable with an envelope</h2></div>
   <p>
-    Or give one cycle of a waveform: the page loops it at any pitch and shapes each note with
-    an ADSR envelope, so notes sustain for as long as you hold the key.
+    One cycle, looped at any pitch and shaped by an ADSR envelope.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-wavetable">▶ Run</button></div>
@@ -90,11 +80,9 @@ kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span> * cycl
 
   <div class="step-h"><span class="n">03</span><h2>Plucked strings, played by the genie</h2></div>
   <p>
-    <b>Karplus–Strong</b> synthesis: a burst of noise circulating in a delay line one period
-    long, a little quieter and duller on every trip — and it sounds like a plucked string.
-    This keyboard starts in <b>genie mode</b>: play the eight buttons (<code>1</code>–<code>8</code>
-    or <code>A S D F J K L ;</code>) in any rhythm and contour, and a neural network turns them
-    into a melody. Switch to <b>Keys</b> any time.
+    <b>Karplus–Strong</b>: noise circulating in a lossy delay line one period long.
+    Starts in <b>genie mode</b>: play <code>1</code>–<code>8</code> or
+    <code>A S D F J K L ;</code>.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-strings">▶ Run</button></div>
@@ -127,11 +115,8 @@ kb = <span class="f">keyboard</span>(karplus_strong, sr, release=<span class="n"
 
   <div class="step-h"><span class="n">04</span><h2>A drum machine on eight pads</h2></div>
   <p>
-    Every drum synthesized from scratch in NumPy — pitch sweeps for the kick and toms,
-    filtered noise for the hats, three quick noise bursts for the clap — and laid out on
-    <code>A S D F J K L ;</code> with a <code>KeyMap</code>. <code>one_shot=True</code> lets each
-    hit ring out however briefly you tap. Try the <b>Genie</b> switch here too: the genie
-    drums, using only these eight sounds.
+    Every drum synthesized in NumPy, on <code>A S D F J K L ;</code>. Try
+    <b>Genie</b> here too.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-drums">▶ Run</button></div>
@@ -175,8 +160,7 @@ kb = <span class="f">keyboard</span>(drum, sr, keymap=pads, one_shot=<span class
 
   <div class="step-h"><span class="n">05</span><h2>Replay your performance</h2></div>
   <p>
-    Play something above first. <code>kb.render()</code> re-synthesises exactly what you played
-    on the last keyboard, offline, as a NumPy array you can analyse, edit, or play back.
+    <code>kb.render()</code> re-synthesises what you played on the last keyboard.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-render">▶ Run</button></div>

@@ -1,14 +1,5 @@
-// controls.js — how you play the keyboard widgets (Keyboard, Stream).
-// (Python prepends ui.js and genie.js, then this, to each widget's source.)
-//
-// Two input modes, switched with the Keys | Genie control or `input=` in Python:
-//   - Keys: "musical typing" through a small state machine synced from Python
-//     (`keymap`): pressing keys[i] looks up table[state][i] -> [midi, next].
-//   - Genie: 8 buttons (1–8, or A S D F J K L ;), each press turned into one
-//     of the 88 piano keys by Piano Genie (see genie.js for the citation).
-// Either way the widget gets onNoteOn(midi) -> handle and onNoteOff(handle),
-// and the 88-key strip lights up what sounds. Key codes are
-// KeyboardEvent.code, so the physical layout is the same on QWERTY, AZERTY...
+// controls.js — Keys (musical typing via `keymap`) and Genie (8 buttons, Piano
+// Genie) input for Keyboard and Stream: onNoteOn(midi) -> handle, onNoteOff(handle).
 
 const PUNCT = {
   Semicolon: ";", Quote: "'", Comma: ",", Period: ".", Slash: "/",
@@ -20,7 +11,7 @@ const keyLabel = (code) =>
   : code.startsWith("Digit") ? code.slice(5)
   : PUNCT[code] || code;
 
-// Genie buttons: the number row, or the home row for laptops.
+// Genie buttons: number row or home row.
 const GENIE_CODES = [
   ["Digit1", "KeyA"], ["Digit2", "KeyS"], ["Digit3", "KeyD"], ["Digit4", "KeyF"],
   ["Digit5", "KeyJ"], ["Digit6", "KeyK"], ["Digit7", "KeyL"], ["Digit8", "Semicolon"],
@@ -76,8 +67,6 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
     tiles && tiles.forEach((t) => t.classList.remove("down"));
     pads.forEach((p) => p.classList.remove("down"));
   }
-
-  // ----- Keys mode ---------------------------------------------------------
 
   function pressKey(i) {
     if (held.has("k" + i)) return;
@@ -136,8 +125,6 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
         "<kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> … black keys, <kbd>Z</kbd> / <kbd>X</kbd> octave.";
   }
 
-  // ----- Genie mode ----------------------------------------------------------
-
   function loadGenie() {
     if (genie || genieLoading) return genieLoading;
     ui.note("Loading the Piano Genie model (1.2 MB)…", "info");
@@ -193,8 +180,6 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
     loadGenie();
   }
 
-  // ----- shared --------------------------------------------------------------
-
   function pointerPlay(node, down, up) {
     node.addEventListener("pointerdown", (e) => {
       e.preventDefault();
@@ -245,12 +230,11 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
   });
   const setListening = () => root.classList.toggle("ba-listening", ui.hasFocus());
   root.addEventListener("focusin", (e) => {
-    // Focusing the playing surface starts audio; the header's buttons (Stop,
-    // Keys | Genie) don't — or Stop would restart it straight away.
+    // The header's buttons (Stop, Keys | Genie) don't start audio.
     if (onFocus && !ui.actions.contains(e.target)) onFocus();
     setListening();
   });
-  // No stuck notes: a key released while we weren't focused never reaches us.
+  // Release everything when focus leaves (key-ups won't reach us).
   root.addEventListener("focusout", (e) => {
     if (root.contains(e.relatedTarget)) return;
     liftAll();
