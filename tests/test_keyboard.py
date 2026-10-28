@@ -266,3 +266,36 @@ def test_render_wavetable_pitch():
 
 def test_render_with_no_events_is_empty():
     assert Keyboard(wavetable=np.zeros(8)).render().shape == (0, 1)
+
+
+# ----- genie mode ---------------------------------------------------------------
+
+
+def test_input_defaults_to_keys_with_genie_settings():
+    from browseraudio._assets import GENIE_CHECKPOINT
+
+    kb = Keyboard(wavetable=np.zeros(8))
+    assert kb.input == "keys"
+    assert kb.genie_temperature == 0.25
+    assert kb.genie_checkpoint == GENIE_CHECKPOINT
+
+
+def test_genie_mode_and_overrides():
+    kb = Keyboard(wavetable=np.zeros(8), input="genie", genie_temperature=0.0,
+                  genie_checkpoint="https://example.org/genie")
+    assert (kb.input, kb.genie_temperature, kb.genie_checkpoint) == (
+        "genie", 0.0, "https://example.org/genie")
+    kb.input = "keys"  # the widget's Keys | Genie control sets this too
+
+
+@pytest.mark.parametrize("kwargs", [{"input": "piano"}, {"genie_temperature": 1.5},
+                                    {"genie_temperature": -0.1}])
+def test_genie_validation(kwargs):
+    with pytest.raises(ValueError):
+        Keyboard(wavetable=np.zeros(8), **kwargs)
+
+
+def test_frontend_bundles_the_shared_ui_and_genie():
+    esm = Keyboard(wavetable=np.zeros(8))._esm
+    for marker in ("function mountUI", "class Genie", "function createControls", "export default"):
+        assert marker in esm

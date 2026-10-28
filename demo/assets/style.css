@@ -180,7 +180,8 @@ a.row:hover .arr { transform: translateX(3px); }
 .cell-code .c { color: var(--muted); }
 .cell-code .f { color: var(--ink); }
 
-/* browseraudio's own widget elements rendered into .cell-out */
+/* Plain widget outputs in .cell-out (ipywidgets buttons, <audio> players).
+   browseraudio's widgets render in a shadow root and style themselves. */
 .cell-out .jupyter-button, .cell-out button {
   display: inline-flex; align-items: center; gap: var(--s1);
   background: var(--accent); color: #fff; border: 0;
@@ -190,7 +191,6 @@ a.row:hover .arr { transform: translateX(3px); }
 .cell-out .jupyter-button:hover, .cell-out button:hover { background: var(--accent-strong); }
 .cell-out button[disabled] { opacity: 0.5; cursor: default; }
 .cell-out audio { display: block; width: 100%; margin-top: var(--s3); }
-.cell-out > span { font: 0.84rem var(--mono); color: var(--muted); margin-left: var(--s2); }
 
 /* ---------- Callout ---------- */
 .callout {

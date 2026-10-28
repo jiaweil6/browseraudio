@@ -1,13 +1,15 @@
 // recorder.js — anywidget frontend for browseraudio.Recorder.
+// (Python prepends ui.js, the shared look and controls.)
 //
 // Runs on the MAIN thread, where the Web Audio API and getUserMedia live.
 // The Python kernel that drives this widget may be in a Web Worker
 // (JupyterLite / thebe-lite), which has no access to those APIs — so the
 // capture happens here and the samples are handed back to Python over the
-// widget comm channel (base64-encoded float32 PCM). After capturing, an
-// inline <audio> player is shown so the user can hear the take immediately.
+// widget comm channel (base64-encoded float32 PCM). Record and Stop work at
+// any moment: stopping early keeps what was captured so far. The take can be
+// previewed right away with the Play button.
 //
-// v0 uses ScriptProcessorNode: deprecated but universally supported and
+// Capture uses ScriptProcessorNode: deprecated but universally supported and
 // dependency-free. A future version should move to an AudioWorklet.
 
 function toBase64(buffer) {
@@ -20,88 +22,104 @@ function toBase64(buffer) {
   return btoa(binary);
 }
 
-// Encode float32 [-1, 1] mono samples as a 16-bit PCM WAV blob (for the
-// inline preview player only; Python receives the full-precision float32).
-function wavBlob(samples, sampleRate) {
-  const n = samples.length;
-  const buffer = new ArrayBuffer(44 + n * 2);
-  const view = new DataView(buffer);
-  const writeStr = (offset, str) => {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+function render({ model, el }) {
+  const ui = mountUI(el, "Recorder");
+  const button = uiButton({ icon: "record", label: "Record" });
+  ui.actions.append(button);
+  const live = baEl("div", "ba-row");
+  const meter = uiMeter(live);
+  ui.body.append(live);
+  const progress = uiProgress(ui.body);
+  let take = null; // { pcm, sampleRate } of the latest recording
+  const preview = uiPlayback(ui.body, {
+    secondary: true,
+    makeBuffer: (ctx) => {
+      if (!take) return null;
+      const buffer = ctx.createBuffer(1, take.pcm.length, take.sampleRate);
+      buffer.copyToChannel(take.pcm, 0);
+      return buffer;
+    },
+  });
+  live.style.display = "none";
+  preview.row.style.display = "none";
+  const showCapture = (on) => {
+    live.style.display = on ? "" : "none";
+    progress.row.style.display = on || !take ? "" : "none";
   };
-  writeStr(0, "RIFF");
-  view.setUint32(4, 36 + n * 2, true);
-  writeStr(8, "WAVE");
-  writeStr(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, "data");
-  view.setUint32(40, n * 2, true);
-  let offset = 44;
-  for (let i = 0; i < n; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    offset += 2;
+
+  let recording = false;
+  let stopRequested = false;
+  let stopEarly = null; // ends the capture now, keeping what was recorded
+
+  const label = () => "Record " + model.get("duration") + " s";
+  function idle(text) {
+    button.set({ icon: "record", label: label() });
+    ui.status(take ? "ready" : "idle", text || (take ? "recorded" : "ready"));
   }
-  return new Blob([buffer], { type: "audio/wav" });
-}
+  model.on("change:duration", () => {
+    if (!recording) idle();
+    progress.set(0, model.get("duration"));
+  });
+  progress.set(0, model.get("duration"));
+  idle();
 
-async function render({ model, el }) {
-  const button = document.createElement("button");
-  button.className = "jupyter-button";
-  const status = document.createElement("span");
-  status.style.marginLeft = "0.5em";
-  const player = document.createElement("div"); // holds the inline preview
-  player.style.marginTop = "0.5em";
-
-  const label = () => "● Record " + model.get("duration") + "s";
-  button.textContent = label();
-  model.on("change:duration", () => (button.textContent = label()));
-  el.append(button, status, player);
-
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    status.textContent = "recording…";
-    player.replaceChildren();
+  async function record() {
+    recording = true;
+    stopRequested = false;
+    preview.stop(false);
+    preview.row.style.display = "none";
+    showCapture(true);
+    ui.note("");
+    button.set({ icon: "stop", label: "Stop" });
+    ui.status("load", "waiting for the microphone…");
     let stream;
+    let ctx;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
+      ctx = newAudioContext();
       await ctx.resume();
       const sampleRate = ctx.sampleRate;
       const duration = model.get("duration");
+      const target = Math.round(duration * sampleRate);
 
       const source = ctx.createMediaStreamSource(stream);
       const processor = ctx.createScriptProcessor(4096, 1, 1);
       const chunks = [];
       let total = 0;
+      ui.status("rec", "recording");
 
       await new Promise((resolve) => {
+        const safety = setTimeout(resolve, (duration + 1.5) * 1000); // never hang
         processor.onaudioprocess = (event) => {
+          if (stopRequested || total >= target) return;
           const input = event.inputBuffer.getChannelData(0);
           chunks.push(new Float32Array(input));
           total += input.length;
-          if (total >= duration * sampleRate) resolve();
+          let sum = 0;
+          for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+          meter.set(Math.sqrt(sum / input.length));
+          progress.set(Math.min(total, target) / sampleRate, duration);
+          if (total >= target) {
+            clearTimeout(safety);
+            resolve();
+          }
+        };
+        stopEarly = () => {
+          clearTimeout(safety);
+          resolve();
         };
         source.connect(processor);
         processor.connect(ctx.destination);
-        setTimeout(resolve, (duration + 1.5) * 1000); // safety: never hang
+        if (stopRequested) stopEarly(); // Stop pressed during the permission prompt
       });
 
       processor.disconnect();
       source.disconnect();
-      ctx.close();
 
       // ScriptProcessor delivers fixed 4096-sample blocks, so `total` overshoots
       // the request by up to one block. Trim to exactly the requested duration
-      // (but no more than we captured, in case the safety timeout fired early).
-      const length = Math.min(total, Math.round(duration * sampleRate));
+      // (or to what was captured, if stopped early / the safety timeout fired).
+      const length = Math.min(total, target);
       const pcm = new Float32Array(length);
       let offset = 0;
       for (const chunk of chunks) {
@@ -114,23 +132,46 @@ async function render({ model, el }) {
       model.set("_pcm_b64", length ? toBase64(pcm.buffer) : "");
       if (!length) model.set("_error", "no audio was captured");
       model.save_changes();
-      status.textContent = "recorded " + (length / sampleRate).toFixed(2) + "s";
-
       if (length) {
-        const audio = document.createElement("audio");
-        audio.controls = true;
-        audio.src = URL.createObjectURL(wavBlob(pcm, sampleRate));
-        player.append(audio);
+        take = { pcm, sampleRate };
+        preview.setDuration(length / sampleRate);
+        preview.row.style.display = "";
+        idle("recorded " + (length / sampleRate).toFixed(2) + " s" + (stopRequested ? " (stopped early)" : ""));
+      } else {
+        idle();
+        ui.note("No audio was captured.");
       }
     } catch (err) {
       model.set("_error", String(err));
       model.save_changes();
-      status.textContent = "error: " + err;
+      idle();
+      ui.status("error", "error");
+      ui.note(String(err));
     } finally {
       if (stream) stream.getTracks().forEach((t) => t.stop());
-      button.disabled = false;
+      if (ctx) ctx.close();
+      stopEarly = null;
+      recording = false;
+      showCapture(false);
+      meter.set(0);
+    }
+  }
+
+  button.addEventListener("click", () => {
+    if (!recording) {
+      record();
+    } else {
+      stopRequested = true;
+      if (stopEarly) stopEarly();
     }
   });
+
+  return () => {
+    stopRequested = true;
+    if (stopEarly) stopEarly();
+    preview.destroy();
+    ui.destroy();
+  };
 }
 
 export default { render };

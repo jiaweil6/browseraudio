@@ -83,3 +83,12 @@ def test_player_defaults():
     assert p.n_channels == 1
     assert p.autoplay is True
     assert p._pcm_b64 == ""
+
+
+def test_play_and_stop_drive_playing(captured_display):
+    p = play(np.zeros(4, dtype=np.float32), 8000, autoplay=False)
+    assert p.playing is False
+    p.play()
+    assert p.playing is True
+    p.stop()
+    assert p.playing is False

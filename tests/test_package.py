@@ -40,5 +40,6 @@ def test_frontend_assets_are_packaged():
     assert (static / "recorder.js").is_file()
     assert (static / "player.js").is_file()
     assert (static / "keyboard.js").is_file()
-    assert (static / "keys.js").is_file()
+    for name in ("ui.js", "genie.js", "controls.js"):
+        assert (static / name).is_file()
     assert (static / "stream.js").is_file()

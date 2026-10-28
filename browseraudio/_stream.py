@@ -9,7 +9,8 @@ import anywidget
 import numpy as np
 import traitlets
 
-from ._keyboard import KeyMap, _bundle
+from ._assets import GENIE_CHECKPOINT, INPUTS, _bundle, _check_input
+from ._keyboard import KeyMap
 from ._pcm import encode_f32
 
 
@@ -54,6 +55,11 @@ class Stream(anywidget.AnyWidget):
 
         stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
 
+    Play with musical typing (``input="keys"``) or in **genie mode**
+    (``input="genie"``): 8 buttons whose notes are chosen by Piano Genie
+    (Donahue, Simon & Dieleman, IUI 2019); ``on_note`` receives the notes
+    either way.
+
     The control-to-sound latency is about the queued audio (``lookahead``,
     rounded up to whole blocks) plus one kernel round trip; the widget shows
     the live numbers. Small blocks cost more callback calls per second (the
@@ -74,13 +80,17 @@ class Stream(anywidget.AnyWidget):
         playing: Whether the stream is running; set by the Start/Stop button
             or by :meth:`start` / :meth:`stop`.
         keyboard: Show the computer-keyboard control surface.
+        input: ``"keys"`` (musical typing) or ``"genie"`` (genie mode).
+        genie_temperature: Genie mode's sampling temperature, 0 to 1.
+        genie_range: Lowest and highest MIDI note genie mode may play.
+        genie_checkpoint: URL of the Piano Genie model (Magenta's by default).
         error: The last callback error (the stream stops on one), else ``""``.
         blocks_rendered: Blocks synthesised since the last start.
         busy: Seconds spent in ``callback`` since the last start.
         dropouts: Times the browser ran out of audio since the last start.
     """
 
-    _esm = _bundle("keys.js", "stream.js")
+    _esm = _bundle("ui.js", "genie.js", "controls.js", "stream.js")
 
     sample_rate = traitlets.Int(44100).tag(sync=True)
     block_size = traitlets.Int(512).tag(sync=True)
@@ -89,6 +99,10 @@ class Stream(anywidget.AnyWidget):
     keymap = traitlets.Dict().tag(sync=True)
     playing = traitlets.Bool(False).tag(sync=True)
     keyboard = traitlets.Bool(True).tag(sync=True)
+    input = traitlets.Enum(INPUTS, "keys").tag(sync=True)
+    genie_temperature = traitlets.Float(0.25).tag(sync=True)
+    genie_range = traitlets.List([21, 108]).tag(sync=True)
+    genie_checkpoint = traitlets.Unicode(GENIE_CHECKPOINT).tag(sync=True)
     error = traitlets.Unicode("").tag(sync=True)
 
     def __init__(
@@ -101,6 +115,10 @@ class Stream(anywidget.AnyWidget):
         lookahead: float = 0.04,
         keymap: Optional[KeyMap] = None,
         on_note: Optional[Callable[[int, bool], None]] = None,
+        input: str = "keys",
+        genie_temperature: float = 0.25,
+        genie_range=(21, 108),
+        genie_checkpoint: str = GENIE_CHECKPOINT,
         **kwargs,
     ):
         if not callable(callback):
@@ -114,6 +132,10 @@ class Stream(anywidget.AnyWidget):
             raise ValueError(f"channels must be >= 1, got {channels}")
         if lookahead < 0:
             raise ValueError(f"lookahead must be >= 0 seconds, got {lookahead}")
+        _check_input(input, genie_temperature)
+        lo, hi = (int(m) for m in genie_range)
+        if not 21 <= lo <= hi <= 108:
+            raise ValueError(f"genie_range must lie within the piano, 21..108, got {genie_range}")
         keymap = keymap if keymap is not None else KeyMap.musical_typing()
         super().__init__(
             sample_rate=int(sample_rate),
@@ -121,6 +143,10 @@ class Stream(anywidget.AnyWidget):
             channels=int(channels),
             lookahead=float(lookahead),
             keymap=keymap.to_dict(),
+            input=input,
+            genie_temperature=float(genie_temperature),
+            genie_range=[lo, hi],
+            genie_checkpoint=genie_checkpoint,
             **kwargs,
         )
         self.callback = callback
