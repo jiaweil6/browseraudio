@@ -1,4 +1,4 @@
-"""The microphone Recorder widget."""
+"""Microphone recording."""
 
 from __future__ import annotations
 
@@ -14,35 +14,24 @@ from ._pcm import decode_f32
 
 
 class Recorder(anywidget.AnyWidget):
-    """A microphone recorder for in-browser Python (Pyodide / JupyterLite).
+    """Records the microphone in the page and hands the samples to Python.
 
-    The audio is captured on the browser's main thread (where the Web Audio
-    API and ``getUserMedia`` live) and handed back to the Python kernel — so
-    it works even when the kernel runs in a Web Worker, as it does under
-    JupyterLite and thebe-lite.
+    The take arrives after the cell finishes, so read it in a later cell::
 
-    Because the recording finishes *after* you click the button, read the
-    result in a separate cell from the one that displays the widget::
-
-        from browseraudio import Recorder
-        rec = Recorder(duration=3.0)
-        rec                       # shows a "Record" button — click it
-
-        # ...then, in a later cell:
-        rec.samples               # float32 ndarray, shape (n_frames, 1)
-        rec.sample_rate           # e.g. 48000
+        rec = Recorder(duration=3.0); rec   # click Record
+        rec.samples                         # next cell: float32 (n_frames, 1)
 
     Attributes:
-        duration: Length to record, in seconds (default 3.0).
-        sample_rate: The browser AudioContext's rate; set after recording.
-        error: A message if the last attempt failed, else ``None``.
+        duration: Seconds to record.
+        sample_rate: The AudioContext rate; set after recording.
+        error: Message from the last failed attempt, else ``None``.
     """
 
     _esm = _bundle("ui.js", "recorder.js")
 
     duration = traitlets.Float(3.0).tag(sync=True)
     sample_rate = traitlets.Int(0).tag(sync=True)
-    # Internal sync state (the transport is base64 float32 over the comm).
+    # Synced from the browser.
     _pcm_b64 = traitlets.Unicode("").tag(sync=True)
     _error = traitlets.Unicode("").tag(sync=True)
 
@@ -68,19 +57,10 @@ class Recorder(anywidget.AnyWidget):
         return self._samples
 
     def on_result(self, callback: Callable[["Recorder"], None]) -> Callable:
-        """Run ``callback(self)`` when a recording arrives from the browser.
-
-        A clean, public alternative to observing the internal ``_pcm_b64``
-        trait: the callback fires once samples have been captured (i.e. after
-        the user clicks **Record** and the audio crosses the comm), with this
-        :class:`Recorder` so you can read ``.samples`` / ``.sample_rate`` /
-        ``.to_pyquist()``. Returns the underlying handler so you can later pass
-        it to :meth:`unobserve` if you need to detach.
-        """
+        """Call ``callback(self)`` when a take arrives; returns the handler."""
 
         def _handler(change) -> None:
-            # ``_on_pcm`` is registered first (in __init__), so by the time this
-            # runs ``self._samples`` already reflects the new capture.
+            # _on_pcm (registered first) has already decoded the take.
             if self._samples is not None:
                 callback(self)
 
@@ -88,13 +68,7 @@ class Recorder(anywidget.AnyWidget):
         return _handler
 
     def on_error(self, callback: Callable[[str], None]) -> Callable:
-        """Run ``callback(message)`` when a recording attempt fails.
-
-        Surfaces the same failures as the :attr:`error` attribute (permission
-        denied, no input device, nothing captured, …) as they happen, instead
-        of being silently dropped. Returns the underlying handler for
-        :meth:`unobserve`.
-        """
+        """Call ``callback(message)`` when a take fails; returns the handler."""
 
         def _handler(change) -> None:
             if change["new"]:
@@ -104,14 +78,9 @@ class Recorder(anywidget.AnyWidget):
         return _handler
 
     async def result(self) -> "Recorder":
-        """Await the next completed recording, then return this recorder.
+        """Await the next take and return ``self``; raise ``RuntimeError`` on failure.
 
-        Resolves once samples arrive (read them via ``.samples`` /
-        ``.to_pyquist()``), or raises :class:`RuntimeError` if the attempt
-        fails. **Main-thread only:** in a Web-Worker kernel (JupyterLite /
-        thebe) the comm reply can't be processed while this coroutine's cell is
-        still running, so awaiting would hang forever — we detect that and raise
-        immediately, pointing you at the two-cell flow instead.
+        Main-thread kernels only: in a Web Worker it raises at once rather than hang.
         """
         if in_worker():
             raise RuntimeError(
@@ -143,7 +112,7 @@ class Recorder(anywidget.AnyWidget):
             self.unobserve(_failed, names="_error")
 
     def to_pyquist(self):
-        """Return the recording as a :class:`pyquist.Audio` (requires pyquist)."""
+        """The take as a ``pyquist.Audio``."""
         if self._samples is None:
             raise RuntimeError("Nothing recorded yet — click Record first.")
         import pyquist as pq
@@ -152,13 +121,7 @@ class Recorder(anywidget.AnyWidget):
 
 
 def record(duration: float = 3.0) -> Recorder:
-    """Create, display, and return a :class:`Recorder`.
-
-    Click **Record**, then read ``.samples`` (or ``.to_pyquist()``) in a
-    *later* cell. (A single-cell ``await`` flow can't work in Jupyter/thebe:
-    the kernel doesn't process the widget-comm reply while the same cell is
-    still running, so the recording would never arrive — hence two cells.)
-    """
+    """Display a :class:`Recorder` and return it. Read ``.samples`` in a later cell."""
     from IPython.display import display
 
     rec = Recorder(duration=duration)

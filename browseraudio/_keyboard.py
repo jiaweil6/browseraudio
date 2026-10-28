@@ -1,4 +1,4 @@
-"""The real-time Keyboard synth widget."""
+"""Keyboard: a synth designed in NumPy, played in the browser."""
 
 from __future__ import annotations
 
@@ -11,9 +11,7 @@ import traitlets
 from ._assets import GENIE_CHECKPOINT, INPUTS, _bundle, _check_input
 from ._pcm import encode_f32
 
-# Ableton-style "musical typing": the home row plays the white keys and the row
-# above it the black keys, as (KeyboardEvent.code, semitones above the base).
-# Physical key codes, so the layout is the same on QWERTY, AZERTY, ...
+# Musical typing: (key code, semitones above the base).
 _MUSICAL_TYPING: List[Tuple[str, int]] = [
     ("KeyA", 0), ("KeyW", 1), ("KeyS", 2), ("KeyE", 3), ("KeyD", 4),
     ("KeyF", 5), ("KeyT", 6), ("KeyG", 7), ("KeyY", 8), ("KeyH", 9),
@@ -21,39 +19,31 @@ _MUSICAL_TYPING: List[Tuple[str, int]] = [
     ("KeyP", 15), ("Semicolon", 16),
 ]
 
-# Used for the offline render() of a wavetable keyboard, where the browser's
-# AudioContext rate isn't known on the Python side.
+# render() rate for wavetables (the browser's rate isn't known here).
 NOMINAL_SAMPLERATE = 48000
 
-# Each rendered note's last few milliseconds fade to silence, so a sound that
-# hasn't decayed by the end of its buffer ends without a click.
+# Fade each rendered note's last 5 ms so a cut-off sound doesn't click.
 TAIL_FADE = 0.005
 
 Event = Tuple[float, int, str]
 
 
 def midi_to_hz(midi: float) -> float:
-    """Equal-tempered frequency of a MIDI note number (A4 = 69 = 440 Hz)."""
+    """MIDI note -> Hz (A4 = 69 = 440 Hz)."""
     return 440.0 * 2.0 ** ((midi - 69) / 12.0)
 
 
 class KeyMap:
-    """Maps computer keys to MIDI notes through a small state machine.
+    """Computer keys -> MIDI notes, as a state machine.
 
-    Each press of ``keys[i]`` looks up ``table[state][i] -> (midi, next_state)``:
-    it plays ``midi`` (unless ``None``) and moves to ``next_state``. A plain
-    piano is a single state; octave-shift keys are entries that play nothing
-    and only change state. The same table can express context-dependent
-    mappings (e.g. Piano-Genie-style few-buttons-to-many-pitches), and the
-    browser evaluates it per key press with no round-trip to Python.
+    Pressing ``keys[i]`` looks up ``table[state][i] -> (midi, next_state)``,
+    plays ``midi`` (unless ``None``) and moves to ``next_state``.
 
     Args:
-        keys: ``KeyboardEvent.code`` names (e.g. ``"KeyA"``, ``"Semicolon"``).
-        table: One row per state, each with one ``(midi, next_state)`` entry
-            per key.
-        start: The initial state.
-        labels: Optional names shown on the keys instead of note names (e.g.
-            ``["kick", "snare", ...]`` for drum pads), one per key.
+        keys: ``KeyboardEvent.code`` names, e.g. ``"KeyA"``.
+        table: Per state, one ``(midi, next_state)`` per key.
+        start: Initial state.
+        labels: Optional key names shown instead of note names.
     """
 
     def __init__(
@@ -102,12 +92,7 @@ class KeyMap:
         down: str = "KeyZ",
         up: str = "KeyX",
     ) -> "KeyMap":
-        """The DAW-style computer keyboard: ``A`` plays ``base`` (middle C).
-
-        ``A S D F G H J K L ;`` are the white keys and ``W E T Y U O P`` the
-        black keys, spanning ``base`` to ``base + 16``; ``down`` / ``up`` step
-        through ``octaves`` (one state per octave offset, starting at 0).
-        """
+        """DAW-style layout: ``A``..``;`` from ``base``, ``down``/``up`` step ``octaves``."""
         octaves = list(octaves)
         if 0 not in octaves:
             raise ValueError("octaves must include 0 (the starting octave)")
@@ -124,11 +109,11 @@ class KeyMap:
         return cls(keys, table, start=octaves.index(0))
 
     def notes(self) -> List[int]:
-        """Every MIDI note this map can play, ascending."""
+        """All playable MIDI notes, ascending."""
         return sorted({m for row in self.table for m, _ in row if m is not None})
 
     def to_dict(self) -> dict:
-        """The JSON form synced to the browser."""
+        """JSON form synced to the browser."""
         return {
             "keys": list(self.keys),
             "table": [[[m, n] for m, n in row] for row in self.table],
@@ -146,12 +131,7 @@ def _envelope(
     sustain: float,
     release: float,
 ) -> np.ndarray:
-    """Linear ADSR gain curve, ``n`` samples long, released at ``n_hold``.
-
-    Mirrors the ``GainNode`` automation in ``keyboard.js`` so that
-    :meth:`Keyboard.render` reproduces what was heard. ``n_hold=None`` means
-    never released (one-shot voices).
-    """
+    """Linear ADSR, ``n`` samples, released at ``n_hold`` (``None``: never). Mirrors keyboard.js."""
     t = np.arange(n) / sample_rate
 
     def held(t):
@@ -176,43 +156,23 @@ def _envelope(
 
 
 class Keyboard(anywidget.AnyWidget):
-    """A synth you play live with the computer keyboard, voiced in the browser.
+    """A synth played with the computer keyboard, voiced in the browser.
 
-    You design the sound in Python — either a ``render(freq) -> ndarray``
-    function, called once per playable note to build a note bank, or a single
-    cycle ``wavetable`` that the browser loops at any pitch. The sound is
-    shipped to the page once; after that every key press is handled on the
-    browser's main thread by the Web Audio API, so playing has no round-trip
-    to the Python kernel (which may be in a Web Worker) and feels immediate.
-
-    Play it with musical typing (``input="keys"``) or in **genie mode**
-    (``input="genie"``): 8 buttons whose notes are chosen by Piano Genie
-    (Donahue, Simon & Dieleman, IUI 2019), limited to the notes this keyboard
-    can play. Switch any time with the widget's Keys | Genie control.
-
-    The notes you play are sent back to Python as :attr:`events`, so a later
-    cell can analyse the performance or :meth:`render` it offline::
-
-        from browseraudio import keyboard
-        kb = keyboard(pluck, sample_rate=22050)   # click it, then play A W S E D ...
-
-        # ...then, in a later cell:
-        kb.events                                 # [(t, midi, "on"|"off"), ...]
-        play(kb.render(), kb.sample_rate)
+    The sound — ``render(freq)`` per note, or a looped ``wavetable`` — is sent
+    once; key presses never wait on the kernel. Played notes come back as
+    :attr:`events`; :meth:`render` re-synthesises them offline.
 
     Attributes:
-        mode: ``"bank"`` (rendered notes) or ``"wavetable"`` (looped cycle).
-        sample_rate: Rate of the rendered notes / of :meth:`render`.
-        attack, decay, sustain, release: Linear ADSR applied in the browser
-            (seconds, except ``sustain``, a level in ``[0, 1]``).
-        gain: Output level per voice.
-        one_shot: Bank mode only — play each note to its end, ignoring key-up.
-        max_voices: Polyphony limit; the oldest voice is stolen beyond it.
-        input: ``"keys"`` (musical typing) or ``"genie"`` (genie mode).
-        genie_temperature: Genie mode's sampling temperature, 0 (always the
-            likeliest note) to 1; 0.25 as in the Piano Genie demo.
-        genie_checkpoint: URL of the Piano Genie model (Magenta's by default).
-        events: Notes played so far, as ``(seconds, midi, "on" | "off")``.
+        mode: ``"bank"`` or ``"wavetable"``.
+        sample_rate: Of the note bank and of :meth:`render`.
+        attack, decay, sustain, release: Linear ADSR (seconds; sustain is a level).
+        gain: Level per voice.
+        one_shot: Bank mode: ignore key-up, play notes to their end.
+        max_voices: Polyphony; the oldest voice is stolen beyond it.
+        input: ``"keys"`` or ``"genie"`` (Piano Genie, limited to the bank).
+        genie_temperature: 0 (greedy) to 1.
+        genie_checkpoint: Piano Genie model URL.
+        events: ``(seconds, midi, "on" | "off")`` per note played.
     """
 
     _esm = _bundle("ui.js", "genie.js", "controls.js", "keyboard.js")
@@ -230,8 +190,7 @@ class Keyboard(anywidget.AnyWidget):
     input = traitlets.Enum(INPUTS, "keys").tag(sync=True)
     genie_temperature = traitlets.Float(0.25).tag(sync=True)
     genie_checkpoint = traitlets.Unicode(GENIE_CHECKPOINT).tag(sync=True)
-    # The sound, as base64 float32 over the comm: the concatenated note bank
-    # (located by `_notes` rows of [midi, start, length]) or the wavetable.
+    # Note bank (rows of [midi, start, length] in `_notes`) or wavetable.
     _pcm_b64 = traitlets.Unicode("").tag(sync=True)
     _notes = traitlets.List().tag(sync=True)
 
@@ -271,7 +230,7 @@ class Keyboard(anywidget.AnyWidget):
         if render is not None:
             if not sample_rate:
                 raise ValueError("sample_rate is required with a render function")
-            # The range every browser's AudioContext.createBuffer accepts.
+            # What every browser's createBuffer accepts.
             if not 3000 <= sample_rate <= 768000:
                 raise ValueError(f"sample_rate must be in 3000..768000 Hz, got {sample_rate}")
             mode = "bank"
@@ -337,30 +296,22 @@ class Keyboard(anywidget.AnyWidget):
                 callback(event)
 
     def on_note(self, callback: Callable[[Event], None], remove: bool = False) -> None:
-        """Run ``callback((t, midi, "on" | "off"))`` for each note played.
-
-        Notes reach the kernel in small batches shortly after they're played
-        (in a Web-Worker kernel, once no cell is running). Pass
-        ``remove=True`` to detach a callback.
-        """
+        """Call ``callback((t, midi, kind))`` per note played; ``remove=True`` detaches."""
         if remove:
             self._note_callbacks.remove(callback)
         else:
             self._note_callbacks.append(callback)
 
     def clear(self) -> None:
-        """Forget the recorded :attr:`events` and restart the clock at 0."""
+        """Forget :attr:`events` and restart the clock."""
         self.events.clear()
         self.send({"type": "clear"})
 
     def render(self) -> np.ndarray:
-        """Re-synthesise the performance in :attr:`events` offline.
+        """The performance in :attr:`events`, re-synthesised as float32 ``(n, 1)``.
 
-        Returns float32 ``(n_frames, 1)`` at :attr:`sample_rate` — the same
-        voices and envelopes the browser played, mixed sample-accurately (the
-        browser's voice stealing and its output limiter aside), ready for
-        :func:`browseraudio.play` or ``pyquist``. Notes still held at the end are released at the last
-        event.
+        Matches the browser except for voice stealing and the output limiter;
+        notes still held are released at the last event.
         """
         sr = self.sample_rate
         voices = self._voices()
@@ -390,7 +341,7 @@ class Keyboard(anywidget.AnyWidget):
         return out.astype(np.float32).reshape(-1, 1)
 
     def _voices(self) -> List[Tuple[int, float, float]]:
-        """Pair note-ons with note-offs (first in, first out per pitch)."""
+        """Pair note-ons with note-offs, FIFO per pitch."""
         events = sorted(self.events, key=lambda e: e[0])
         end = events[-1][0] if events else 0.0
         held: Dict[int, List[float]] = {}
@@ -405,11 +356,10 @@ class Keyboard(anywidget.AnyWidget):
         return sorted(voices, key=lambda v: v[1])
 
     def _wavetable_wave(self, midi: int, n: int) -> np.ndarray:
-        """``n`` samples of the looped wavetable at ``midi``'s pitch."""
+        """``n`` samples of the wavetable at ``midi``'s pitch."""
         table = self._table
         size = table.size
-        # One cycle per `size` samples at the table's own rate, so the read
-        # step for frequency f is f * size / sample_rate (playbackRate in JS).
+        # Read step f * size / sample_rate (playbackRate in JS).
         pos = (np.arange(n) * (midi_to_hz(midi) * size / self.sample_rate)) % size
         i = pos.astype(np.int64)
         frac = pos - i
@@ -421,13 +371,7 @@ def keyboard(
     sample_rate: Optional[int] = None,
     **kwargs,
 ) -> Keyboard:
-    """Create, display, and return a :class:`Keyboard`.
-
-    Click the widget, then play with your computer keyboard. Pass either a
-    ``render(freq) -> ndarray`` function (with ``sample_rate``) or
-    ``wavetable=`` one cycle of a waveform; see :class:`Keyboard` for the
-    envelope and polyphony options.
-    """
+    """Display a :class:`Keyboard` and return it (``render`` + ``sample_rate``, or ``wavetable=``)."""
     from IPython.display import display
 
     kb = Keyboard(render, sample_rate, **kwargs)

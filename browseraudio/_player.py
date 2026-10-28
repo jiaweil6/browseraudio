@@ -13,28 +13,13 @@ from ._pcm import encode_f32
 
 
 class Player(anywidget.AnyWidget):
-    """Play a NumPy audio buffer through the browser's speakers.
-
-    Like :class:`Recorder`, the audio lives on the browser's main thread,
-    where the Web Audio API lives — so playback works even when the Python
-    kernel runs in a Web Worker (JupyterLite / thebe-lite).
-
-    Unlike recording, playback is fire-and-forget: nothing needs to come
-    back to the kernel, so it works in a *single* cell::
-
-        from browseraudio import play
-        play(samples, sample_rate=48000)   # ▶ button; autoplays if allowed
-
-    Play and Stop work at any moment — from the widget's button, or from
-    Python with :meth:`play` / :meth:`stop`. Browsers block audio that starts
-    without a user gesture, so if autoplay is refused the **Play** button
-    always works.
+    """Plays a NumPy buffer through the page's Web Audio (works in Web-Worker kernels).
 
     Attributes:
-        sample_rate: Sample rate of the buffer, in Hz.
-        n_channels: Number of channels (1 = mono, 2 = stereo).
-        autoplay: Try to start playback as soon as the widget renders.
-        playing: Whether it is playing now (kept in sync with the browser).
+        sample_rate: Hz.
+        n_channels: 1 = mono, 2 = stereo.
+        autoplay: Start on render (browsers may block it; Play always works).
+        playing: Synced with the browser; see :meth:`play` / :meth:`stop`.
     """
 
     _esm = _bundle("ui.js", "player.js")
@@ -43,11 +28,11 @@ class Player(anywidget.AnyWidget):
     n_channels = traitlets.Int(1).tag(sync=True)
     autoplay = traitlets.Bool(True).tag(sync=True)
     playing = traitlets.Bool(False).tag(sync=True)
-    # Channel-major (planar) float32 samples, base64 over the comm.
+    # Planar float32, base64.
     _pcm_b64 = traitlets.Unicode("").tag(sync=True)
 
     def play(self) -> None:
-        """Start playback from the beginning (as if Play were pressed)."""
+        """Start playback from the beginning."""
         self.playing = True
 
     def stop(self) -> None:
@@ -56,22 +41,12 @@ class Player(anywidget.AnyWidget):
 
 
 def play(samples, sample_rate: Optional[int] = None, *, autoplay: bool = True) -> Player:
-    """Create, display, and return a :class:`Player` for ``samples``.
-
-    A drop-in shape for ``sounddevice.play`` / ``pyquist.play``: pass a NumPy
-    array (or a :class:`pyquist.Audio`, whose ``sample_rate`` is read
-    automatically) and it plays through the page's speakers.
+    """Display a :class:`Player` for ``samples`` and return it.
 
     Args:
-        samples: Audio as ``(n_frames,)`` or ``(n_frames, n_channels)``,
-            values in ``[-1, 1]``.
-        sample_rate: Sample rate in Hz. If ``None``, taken from
-            ``samples.sample_rate`` (e.g. a ``pyquist.Audio``).
-        autoplay: Try to start playback immediately (falls back to the
-            **▶ Play** button if the browser blocks autoplay).
-
-    Returns:
-        The :class:`Player` widget (call it again or click ▶ to replay).
+        samples: ``(n_frames,)`` or ``(n_frames, n_channels)`` in ``[-1, 1]``.
+        sample_rate: Hz; defaults to ``samples.sample_rate`` (e.g. ``pyquist.Audio``).
+        autoplay: Try to start immediately.
     """
     from IPython.display import display
 
@@ -95,8 +70,7 @@ def play(samples, sample_rate: Optional[int] = None, *, autoplay: bool = True) -
         n_channels=int(n_channels),
         autoplay=autoplay,
     )
-    # Channel-major (planar) layout: all of channel 0, then channel 1, ...
-    # — that's what Web Audio's AudioBuffer.copyToChannel expects.
+    # Planar (channel-major), for AudioBuffer.copyToChannel.
     player._pcm_b64 = encode_f32(arr.T)
     display(player)
     return player
