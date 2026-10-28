@@ -115,7 +115,7 @@ const BA_STYLE = `
 .ba-tile.ctl { background: transparent; color: var(--ba-fg); border: 1px dashed var(--ba-line); height: 42px; }
 .ba-tile.down { background: var(--ba-accent); color: var(--ba-accent-fg); border-color: var(--ba-accent); }
 .ba-tile b { font-size: 14px; font-weight: 650; }
-.ba-tile small { font-size: 10px; opacity: 0.75; }
+.ba-tile small { font-size: 10px; opacity: 0.75; white-space: nowrap; }
 /* genie pads */
 .ba-pads { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .ba-pad { height: 66px; border-radius: 10px; cursor: pointer; touch-action: none; border: 0;

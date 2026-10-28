@@ -52,6 +52,8 @@ class KeyMap:
         table: One row per state, each with one ``(midi, next_state)`` entry
             per key.
         start: The initial state.
+        labels: Optional names shown on the keys instead of note names (e.g.
+            ``["kick", "snare", ...]`` for drum pads), one per key.
     """
 
     def __init__(
@@ -59,6 +61,7 @@ class KeyMap:
         keys: Sequence[str],
         table: Sequence[Sequence[Tuple[Optional[int], int]]],
         start: int = 0,
+        labels: Optional[Sequence[str]] = None,
     ):
         keys = [str(k) for k in keys]
         if not keys:
@@ -87,6 +90,9 @@ class KeyMap:
         self.keys: List[str] = keys
         self.table: List[List[Tuple[Optional[int], int]]] = rows
         self.start: int = int(start)
+        if labels is not None and len(labels) != len(keys):
+            raise ValueError(f"got {len(labels)} labels for {len(keys)} keys")
+        self.labels: Optional[List[str]] = None if labels is None else [str(x) for x in labels]
 
     @classmethod
     def musical_typing(
@@ -127,6 +133,7 @@ class KeyMap:
             "keys": list(self.keys),
             "table": [[[m, n] for m, n in row] for row in self.table],
             "start": self.start,
+            "labels": self.labels,
         }
 
 
@@ -351,8 +358,8 @@ class Keyboard(anywidget.AnyWidget):
 
         Returns float32 ``(n_frames, 1)`` at :attr:`sample_rate` — the same
         voices and envelopes the browser played, mixed sample-accurately (the
-        browser's voice stealing aside), ready for :func:`browseraudio.play`
-        or ``pyquist``. Notes still held at the end are released at the last
+        browser's voice stealing and its output limiter aside), ready for
+        :func:`browseraudio.play` or ``pyquist``. Notes still held at the end are released at the last
         event.
         """
         sr = self.sample_rate

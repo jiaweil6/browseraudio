@@ -59,7 +59,15 @@ function render({ model, el }) {
     if (!ctx) {
       ctx = newAudioContext({ latencyHint: "interactive" });
       out = ctx.createGain();
-      out.connect(ctx.destination);
+      // A gentle limiter: chords that add up past full scale are squeezed
+      // instead of hard-clipping into harsh distortion.
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -6;
+      limiter.knee.value = 6;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.15;
+      out.connect(limiter).connect(ctx.destination);
       buildSound();
     }
     if (ctx.state !== "running") ctx.resume();

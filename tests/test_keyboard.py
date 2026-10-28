@@ -57,7 +57,8 @@ def test_musical_typing_needs_octave_zero():
 
 def test_keymap_to_dict_is_json_shaped():
     km = KeyMap(["KeyA", "KeyB"], [[(60, 0), (None, 0)]])
-    assert km.to_dict() == {"keys": ["KeyA", "KeyB"], "table": [[[60, 0], [None, 0]]], "start": 0}
+    assert km.to_dict() == {"keys": ["KeyA", "KeyB"], "table": [[[60, 0], [None, 0]]], "start": 0,
+                            "labels": None}
 
 
 @pytest.mark.parametrize(
@@ -75,6 +76,14 @@ def test_keymap_to_dict_is_json_shaped():
 def test_keymap_validation(keys, table, start):
     with pytest.raises(ValueError):
         KeyMap(keys, table, start)
+
+
+def test_keymap_labels():
+    km = KeyMap(["KeyA", "KeyS"], [[(36, 0), (38, 0)]], labels=["kick", "snare"])
+    assert km.to_dict()["labels"] == ["kick", "snare"]
+    assert KeyMap.musical_typing().to_dict()["labels"] is None
+    with pytest.raises(ValueError):
+        KeyMap(["KeyA", "KeyS"], [[(36, 0), (38, 0)]], labels=["kick"])
 
 
 def test_genie_style_state_machine_is_expressible():

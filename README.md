@@ -131,30 +131,36 @@ from browseraudio import stream
 
 class Sinusoid:
     def __init__(self):
-        self.pitch, self.phase = None, 0.0     # None: no key held
+        self.pitch, self.phase = 60, 0.0
+        self.on, self.amp = False, 0.0          # key held? level at the last block's end
 
     def callback(self, block):                  # block: (B, channels), .sample_rate
-        if self.pitch is None:
-            return                              # blocks start zeroed: silence
+        B = len(block)
         f = 440 * 2 ** ((self.pitch - 69) / 12)
+        target = 0.3 if self.on else 0.0
+        amp = np.linspace(self.amp, target, B, endpoint=False)   # glide: no clicks
         dphase = 2 * np.pi * f / block.sample_rate
-        block[:] = 0.3 * np.sin(self.phase + dphase * np.arange(len(block)))[:, None]
-        self.phase = (self.phase + dphase * len(block)) % (2 * np.pi)
+        block[:] = (amp * np.sin(self.phase + dphase * np.arange(B)))[:, None]
+        self.phase = (self.phase + dphase * B) % (2 * np.pi)
+        self.amp = target
 
 synth = Sinusoid()
 
 def on_note(midi, on):
     if on:
-        synth.pitch = midi                      # a new key: glide, keep the phase
+        synth.pitch, synth.on = midi, True      # a new key takes over, phase intact
     elif midi == synth.pitch:                   # the sounding key was released
-        synth.pitch = None
+        synth.on = False
 
 s = stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
 ```
 
 The widget shows the block size, the queue, the kernel round trip, how much of
 the time budget your callback uses, dropouts, and the resulting key-to-sound
-latency — try `block_size=1` and `block_size=16384`. Existing
+latency — try `block_size=1` and `block_size=16384`. For chords, give each held
+key its own voice with an envelope and mix them in the callback — the
+[Real-time demo](https://jiaweil6.github.io/browseraudio/realtime.html) has a
+polyphonic synth, genie mode and FM with live knobs to start from. Existing
 `sounddevice.OutputStream` code runs too, via
 [`browseraudio.sounddevice`](#browseraudiosounddevice).
 

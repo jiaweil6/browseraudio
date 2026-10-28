@@ -101,7 +101,9 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
       const tile = tiles[i];
       tile.className = "ba-tile" + (held.has("k" + i) ? " down" : "");
       let text;
-      if (midi === null) {
+      if (keymap.labels) {
+        text = keymap.labels[i]; // named pads (e.g. drums): no piano colouring
+      } else if (midi === null) {
         tile.classList.add("ctl");
         text = next < state ? "oct−" : next > state ? "oct+" : "·";
       } else {
@@ -128,8 +130,10 @@ function createControls(model, ui, { onNoteOn, onNoteOff, onFocus, onBlur, genie
     row.append(...tiles);
     surface.replaceChildren(row);
     labelTiles();
-    hint.innerHTML = "Click here, then play: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> … white keys, " +
-      "<kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> … black keys, <kbd>Z</kbd> / <kbd>X</kbd> octave.";
+    hint.innerHTML = keymap.labels
+      ? "Click here, then play the keys shown."
+      : "Click here, then play: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> … white keys, " +
+        "<kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> … black keys, <kbd>Z</kbd> / <kbd>X</kbd> octave.";
   }
 
   // ----- Genie mode ----------------------------------------------------------

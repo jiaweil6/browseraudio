@@ -7,6 +7,17 @@ All notable changes to **browseraudio** are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- No clicks from browseraudio itself: streams fade over dropouts (the
+  worklet lets the last sample decay and fades back in) and on Stop; Player /
+  Recorder previews fade in and out; Keyboard fades out on Stop, fades stolen
+  voices over 30 ms, fades each rendered note's last 5 ms, and has a gentle
+  output limiter so chords don't hard-clip.
+- `KeyMap(..., labels=[...])`: name the keys (e.g. drum pads) instead of
+  showing note names.
+- New demos: a polyphonic synth with envelopes, FM with live sliders,
+  Karplus–Strong strings in genie mode, a synthesized drum kit, and your
+  recorded voice as an instrument; the stateful-sine demo now glides instead of
+  clicking.
 - **Genie mode** on the keyboard widgets (`Keyboard`, `Stream`): `input="genie"`
   or the widget's Keys | Genie control turns 8 buttons (`1`–`8` or
   `A S D F J K L ;`) into piano music with
