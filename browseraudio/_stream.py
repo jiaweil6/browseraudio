@@ -44,9 +44,15 @@ class Stream(anywidget.AnyWidget):
     away, so a change of control (e.g. ``synth.pitch``) is heard from the
     next block Python renders::
 
-        synth = Sinusoid()
-        stream(synth.callback, sample_rate=44100, block_size=512,
-               on_note=lambda midi, on: setattr(synth, "pitch", midi) if on else None)
+        synth = Sinusoid()   # its callback leaves the block silent while pitch is None
+
+        def on_note(midi, on):
+            if on:
+                synth.pitch = midi
+            elif midi == synth.pitch:   # the sounding key was released
+                synth.pitch = None
+
+        stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
 
     The control-to-sound latency is about the queued audio (``lookahead``,
     rounded up to whole blocks) plus one kernel round trip; the widget shows

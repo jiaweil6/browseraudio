@@ -47,9 +47,10 @@
   <div class="step-h"><span class="n">01</span><h2>A callback with state</h2></div>
   <p>
     The control (the pitch) is read once per block, and the phase is <b>state</b>,
-    carried from one block to the next so the sine never jumps. Run the cell, press
-    <b>▶ Start</b>, click the keyboard, then play: <code>A S D F G H J K L ;</code> are
-    the white keys, <code>W E T Y U O P</code> the black keys, <code>Z</code> /
+    carried from one block to the next so the sine never jumps. With no key held the
+    pitch is <code>None</code> and the block stays silent. Run the cell, press
+    <b>▶ Start</b>, click the keyboard, then hold keys: <code>A S D F G H J K L ;</code>
+    are the white keys, <code>W E T Y U O P</code> the black keys, <code>Z</code> /
     <code>X</code> shift the octave.
   </p>
   <div class="cell">
@@ -58,19 +59,27 @@
 <span class="k">from</span> browseraudio <span class="k">import</span> stream
 
 <span class="k">class</span> <span class="f">Sinusoid</span>:
-    <span class="k">def</span> <span class="f">__init__</span>(self, pitch=<span class="n">60</span>):
-        self.pitch, self.phase = pitch, <span class="n">0.0</span>
+    <span class="k">def</span> <span class="f">__init__</span>(self):
+        self.pitch, self.phase = <span class="k">None</span>, <span class="n">0.0</span>  <span class="c"># None: no key held</span>
 
     <span class="k">def</span> <span class="f">callback</span>(self, block):           <span class="c"># block: (B, 1), with .sample_rate</span>
-        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)  <span class="c"># read the control once</span>
+        <span class="k">if</span> self.pitch <span class="k">is</span> <span class="k">None</span>:              <span class="c"># read the control once</span>
+            <span class="k">return</span>                          <span class="c"># the block stays silent</span>
+        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)
         B = <span class="f">len</span>(block)
         dphase = <span class="n">2</span> * np.pi * f / block.sample_rate
         block[:] = <span class="n">0.3</span> * np.<span class="f">sin</span>(self.phase + dphase * np.<span class="f">arange</span>(B))[:, np.newaxis]
         self.phase = (self.phase + dphase * B) % (<span class="n">2</span> * np.pi)
 
 synth = <span class="f">Sinusoid</span>()
-s = <span class="f">stream</span>(synth.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>,
-           on_note=<span class="k">lambda</span> midi, on: <span class="f">setattr</span>(synth, <span class="s">"pitch"</span>, midi) <span class="k">if</span> on <span class="k">else</span> <span class="k">None</span>)</code></pre>
+
+<span class="k">def</span> <span class="f">on_note</span>(midi, on):
+    <span class="k">if</span> on:
+        synth.pitch = midi                  <span class="c"># a new key: glide, keep the phase</span>
+    <span class="k">elif</span> midi == synth.pitch:               <span class="c"># the sounding key was released</span>
+        synth.pitch = <span class="k">None</span>
+
+s = <span class="f">stream</span>(synth.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note)</code></pre>
     <div class="cell-out" data-out="rt-sine" hidden></div>
   </div>
 

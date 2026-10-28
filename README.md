@@ -112,26 +112,34 @@ play(rec.to_pyquist())               # sample_rate read from the pyquist.Audio
 
 Write the audio callback a sound card would call — fill one block, keep your
 state (here the phase) between blocks — and play it live. Press **▶ Start**,
-click the widget, and play the computer keyboard (`A W S E D F …`, `Z`/`X` for
-octaves):
+click the widget, and hold keys on the computer keyboard (`A W S E D F …`,
+`Z`/`X` for octaves):
 
 ```python
 import numpy as np
 from browseraudio import stream
 
 class Sinusoid:
-    def __init__(self, pitch=60):
-        self.pitch, self.phase = pitch, 0.0
+    def __init__(self):
+        self.pitch, self.phase = None, 0.0     # None: no key held
 
     def callback(self, block):                  # block: (B, channels), .sample_rate
+        if self.pitch is None:
+            return                              # blocks start zeroed: silence
         f = 440 * 2 ** ((self.pitch - 69) / 12)
         dphase = 2 * np.pi * f / block.sample_rate
         block[:] = 0.3 * np.sin(self.phase + dphase * np.arange(len(block)))[:, None]
         self.phase = (self.phase + dphase * len(block)) % (2 * np.pi)
 
 synth = Sinusoid()
-s = stream(synth.callback, sample_rate=44100, block_size=512,
-           on_note=lambda midi, on: setattr(synth, "pitch", midi) if on else None)
+
+def on_note(midi, on):
+    if on:
+        synth.pitch = midi                      # a new key: glide, keep the phase
+    elif midi == synth.pitch:                   # the sounding key was released
+        synth.pitch = None
+
+s = stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
 ```
 
 The widget shows the block size, the queue, the kernel round trip, how much of
