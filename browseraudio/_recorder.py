@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import pathlib
 from typing import Callable, Optional
 
 import anywidget
 import numpy as np
 import traitlets
 
+from ._assets import _bundle
 from ._env import in_worker
 from ._pcm import decode_f32
-
-_STATIC = pathlib.Path(__file__).parent / "static"
 
 
 class Recorder(anywidget.AnyWidget):
@@ -40,7 +38,7 @@ class Recorder(anywidget.AnyWidget):
         error: A message if the last attempt failed, else ``None``.
     """
 
-    _esm = _STATIC / "recorder.js"
+    _esm = _bundle("ui.js", "recorder.js")
 
     duration = traitlets.Float(3.0).tag(sync=True)
     sample_rate = traitlets.Int(0).tag(sync=True)

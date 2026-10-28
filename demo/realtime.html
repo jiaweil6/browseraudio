@@ -146,7 +146,30 @@ s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100
     <div class="cell-out" data-out="rt-wavetable" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">04</span><h2>sounddevice code, and any widget as a control</h2></div>
+  <div class="step-h"><span class="n">04</span><h2>Genie mode on a stream</h2></div>
+  <p>
+    The same callback, played in <b>genie mode</b>: eight buttons (<code>1</code>–<code>8</code>
+    or <code>A S D F J K L ;</code>), and a neural network picks which piano key each press
+    becomes. Your <code>on_note</code> receives the genie's notes, so nothing else changes.
+    You can also flip the <b>Keys | Genie</b> switch on any stream above.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-genie">▶ Run</button></div>
+<pre class="cell-code"><code>s.<span class="f">stop</span>()
+s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note,
+           input=<span class="s">"genie"</span>, genie_range=(<span class="n">48</span>, <span class="n">84</span>))   <span class="c"># C3 to C6</span></code></pre>
+    <div class="cell-out" data-out="rt-genie" hidden></div>
+  </div>
+
+  <p class="callout">
+    Genie mode is <a href="https://magenta.tensorflow.org/pianogenie"><b>Piano Genie</b></a> —
+    Chris Donahue, Ian Simon &amp; Sander Dieleman, <i>Piano Genie</i>, IUI 2019
+    (<a href="https://arxiv.org/abs/1810.03226">arXiv:1810.03226</a>) — running the trained
+    model published by <a href="https://magenta.tensorflow.org/">Magenta</a>. Please cite it
+    if you use genie mode in your work.
+  </p>
+
+  <div class="step-h"><span class="n">05</span><h2>sounddevice code, and any widget as a control</h2></div>
   <p>
     Code written for <code>sounddevice.OutputStream</code> runs too: its
     <code>callback(outdata, frames, time, status)</code> is pulled the same way. Any

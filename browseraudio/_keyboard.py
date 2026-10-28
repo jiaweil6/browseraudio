@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
-import pathlib
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import anywidget
 import numpy as np
 import traitlets
 
+from ._assets import GENIE_CHECKPOINT, INPUTS, _bundle, _check_input
 from ._pcm import encode_f32
-
-_STATIC = pathlib.Path(__file__).parent / "static"
-
-
-def _bundle(*names: str) -> str:
-    """Concatenate frontend sources into one anywidget module.
-
-    The keyboard widgets share ``keys.js`` (the on-screen keys and key-mapping
-    state machine), which isn't a module of its own — it's prepended so its
-    functions are in scope for the widget source that follows.
-    """
-    return "\n".join((_STATIC / name).read_text(encoding="utf-8") for name in names)
 
 # Ableton-style "musical typing": the home row plays the white keys and the row
 # above it the black keys, as (KeyboardEvent.code, semitones above the base).
@@ -186,6 +174,11 @@ class Keyboard(anywidget.AnyWidget):
     browser's main thread by the Web Audio API, so playing has no round-trip
     to the Python kernel (which may be in a Web Worker) and feels immediate.
 
+    Play it with musical typing (``input="keys"``) or in **genie mode**
+    (``input="genie"``): 8 buttons whose notes are chosen by Piano Genie
+    (Donahue, Simon & Dieleman, IUI 2019), limited to the notes this keyboard
+    can play. Switch any time with the widget's Keys | Genie control.
+
     The notes you play are sent back to Python as :attr:`events`, so a later
     cell can analyse the performance or :meth:`render` it offline::
 
@@ -204,10 +197,14 @@ class Keyboard(anywidget.AnyWidget):
         gain: Output level per voice.
         one_shot: Bank mode only — play each note to its end, ignoring key-up.
         max_voices: Polyphony limit; the oldest voice is stolen beyond it.
+        input: ``"keys"`` (musical typing) or ``"genie"`` (genie mode).
+        genie_temperature: Genie mode's sampling temperature, 0 (always the
+            likeliest note) to 1; 0.25 as in the Piano Genie demo.
+        genie_checkpoint: URL of the Piano Genie model (Magenta's by default).
         events: Notes played so far, as ``(seconds, midi, "on" | "off")``.
     """
 
-    _esm = _bundle("keys.js", "keyboard.js")
+    _esm = _bundle("ui.js", "genie.js", "controls.js", "keyboard.js")
 
     mode = traitlets.Unicode("bank").tag(sync=True)
     sample_rate = traitlets.Int(0).tag(sync=True)
@@ -219,6 +216,9 @@ class Keyboard(anywidget.AnyWidget):
     gain = traitlets.Float(0.5).tag(sync=True)
     one_shot = traitlets.Bool(False).tag(sync=True)
     max_voices = traitlets.Int(16).tag(sync=True)
+    input = traitlets.Enum(INPUTS, "keys").tag(sync=True)
+    genie_temperature = traitlets.Float(0.25).tag(sync=True)
+    genie_checkpoint = traitlets.Unicode(GENIE_CHECKPOINT).tag(sync=True)
     # The sound, as base64 float32 over the comm: the concatenated note bank
     # (located by `_notes` rows of [midi, start, length]) or the wavetable.
     _pcm_b64 = traitlets.Unicode("").tag(sync=True)
@@ -238,6 +238,9 @@ class Keyboard(anywidget.AnyWidget):
         gain: float = 0.5,
         one_shot: bool = False,
         max_voices: int = 16,
+        input: str = "keys",
+        genie_temperature: float = 0.25,
+        genie_checkpoint: str = GENIE_CHECKPOINT,
         **kwargs,
     ):
         if (render is None) == (wavetable is None):
@@ -249,6 +252,7 @@ class Keyboard(anywidget.AnyWidget):
             raise ValueError(f"sustain must be in [0, 1], got {sustain}")
         if max_voices < 1:
             raise ValueError(f"max_voices must be >= 1, got {max_voices}")
+        _check_input(input, genie_temperature)
         keymap = keymap if keymap is not None else KeyMap.musical_typing()
 
         self._bank: Dict[int, np.ndarray] = {}
@@ -297,6 +301,9 @@ class Keyboard(anywidget.AnyWidget):
             gain=float(gain),
             one_shot=bool(one_shot),
             max_voices=int(max_voices),
+            input=input,
+            genie_temperature=float(genie_temperature),
+            genie_checkpoint=genie_checkpoint,
             _notes=notes,
             _pcm_b64=encode_f32(payload),
             **kwargs,

@@ -1,4 +1,5 @@
 // player.js — anywidget frontend for browseraudio.Player.
+// (Python prepends ui.js, the shared look and controls.)
 //
 // Runs on the MAIN thread, where the Web Audio API lives. The Python kernel
 // that drives this widget may be in a Web Worker (JupyterLite / thebe-lite),
@@ -7,30 +8,20 @@
 // happens on this thread.
 //
 // Playback is fire-and-forget: nothing has to return to the kernel, so unlike
-// recording it works in a single cell. Browsers block audio that starts
-// without a user gesture, so we attempt autoplay and always leave a Play
-// button as the fallback.
+// recording it works in a single cell. Play and Stop work at any moment, from
+// the button or from Python (`playing`). Browsers block audio that starts
+// without a user gesture, so autoplay may be refused — the button always works.
 
-function fromBase64(b64) {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Float32Array(bytes.buffer);
-}
-
-async function render({ model, el }) {
-  const button = document.createElement("button");
-  button.className = "jupyter-button";
-  const status = document.createElement("span");
-  status.style.marginLeft = "0.5em";
-  el.append(button, status);
-
-  let ctx;
-  let source; // the currently-playing buffer source, if any
+function render({ model, el }) {
+  const ui = mountUI(el, "Player");
 
   // Build an AudioBuffer from the planar PCM. AudioContext resamples to its
   // own rate on playback, so an arbitrary sample_rate is fine.
-  function buildBuffer() {
+  function buildBuffer(ctx) {
+    if (!model.get("_pcm_b64")) {
+      ui.note("Nothing to play.", "info");
+      return null;
+    }
     const sr = model.get("sample_rate");
     const nch = Math.max(1, model.get("n_channels"));
     const planar = fromBase64(model.get("_pcm_b64"));
@@ -42,47 +33,53 @@ async function render({ model, el }) {
     return buffer;
   }
 
-  async function play() {
-    if (!model.get("_pcm_b64")) {
-      status.textContent = "nothing to play";
-      return;
-    }
-    if (!ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      ctx = new AudioCtx();
-    }
-    await ctx.resume(); // throws / stays suspended if there was no user gesture
-    if (source) {
-      try {
-        source.stop();
-      } catch (e) {
-        /* already stopped */
+  const playback = uiPlayback(ui.body, {
+    makeBuffer: buildBuffer,
+    buttonParent: ui.actions,
+    onChange: (playing) => {
+      ui.status(playing ? "live" : "ready", playing ? "playing" : "ready");
+      if (playing) ui.note("");
+      if (model.get("playing") !== playing) {
+        model.set("playing", playing);
+        model.save_changes();
       }
-    }
-    source = ctx.createBufferSource();
-    source.buffer = buildBuffer();
-    source.connect(ctx.destination);
-    source.onended = () => {
-      status.textContent = "";
-      button.textContent = "▶ Play";
-    };
-    source.start();
-    button.textContent = "▶ Replay";
-    status.textContent = "playing…";
-  }
+    },
+    onBlocked: () => {
+      ui.status("ready", "ready");
+      ui.note("The browser blocked autoplay — press Play.", "info");
+    },
+  });
 
-  button.textContent = "▶ Play";
-  button.addEventListener("click", () => play().catch((err) => {
-    status.textContent = "error: " + err;
-  }));
-
-  if (model.get("autoplay")) {
-    // May be refused by the browser's autoplay policy — that's fine, the
-    // button still works. Swallow the rejection rather than show an error.
-    play().catch(() => {
-      status.textContent = "click ▶ to play";
-    });
+  function describe() {
+    const sr = model.get("sample_rate");
+    const nch = Math.max(1, model.get("n_channels"));
+    const b64 = model.get("_pcm_b64");
+    // base64 -> bytes -> float32 frames, without decoding the whole buffer.
+    const frames = Math.floor((b64.length * 3) / 4 / 4 / nch);
+    const seconds = sr ? frames / sr : 0;
+    playback.setDuration(seconds);
+    ui.stats(
+      (nch === 1 ? "mono" : nch === 2 ? "stereo" : nch + " ch") + " · " +
+      (sr / 1000).toFixed(sr % 1000 ? 1 : 0) + " kHz · " + seconds.toFixed(2) + " s",
+    );
   }
+  describe();
+  ui.status("ready", "ready");
+  model.on("change:_pcm_b64 change:sample_rate change:n_channels", describe);
+
+  // Python's play() / stop().
+  model.on("change:playing", () => {
+    const want = model.get("playing");
+    if (want && !playback.playing) playback.play();
+    else if (!want && playback.playing) playback.stop();
+  });
+
+  if (model.get("autoplay") || model.get("playing")) playback.play();
+
+  return () => {
+    playback.destroy();
+    ui.destroy();
+  };
 }
 
 export default { render };

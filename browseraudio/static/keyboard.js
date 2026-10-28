@@ -1,5 +1,5 @@
 // keyboard.js — anywidget frontend for browseraudio.Keyboard.
-// (Python prepends keys.js, which provides createKeys / fromBase64 / midiToHz.)
+// (Python prepends ui.js, genie.js and controls.js.)
 //
 // Runs on the MAIN thread, where the Web Audio API lives. Python designs the
 // sound once (a bank of rendered notes, or one wavetable cycle) and ships it
@@ -23,6 +23,7 @@ function heldGain(t, a, d, s) {
 }
 
 function render({ model, el }) {
+  const ui = mountUI(el, "Synth");
   let ctx = null;
   let out = null;
   let buffers = new Map(); // midi -> AudioBuffer (bank mode)
@@ -51,18 +52,28 @@ function render({ model, el }) {
     }
   }
 
-  // Created lazily from a focus/key/pointer handler, so it's born from a user
-  // gesture and the autoplay policy lets it run. Built on focus rather than
-  // on the first note: setup takes ~100+ ms and would make that note late.
-  function ensureContext() {
+  // Started from a click, a focus or a key press — all user gestures, so the
+  // autoplay policy lets it run. Built on focus rather than on the first
+  // note: setup takes ~100+ ms and would make that note late.
+  function start() {
     if (!ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      ctx = new AudioCtx({ latencyHint: "interactive" });
+      ctx = newAudioContext({ latencyHint: "interactive" });
       out = ctx.createGain();
       out.connect(ctx.destination);
       buildSound();
     }
     if (ctx.state !== "running") ctx.resume();
+    showState();
+  }
+
+  // Silence now: release every key and voice, and close the audio context.
+  function stop() {
+    controls.liftAll();
+    for (const voice of active) voice.source.stop();
+    active = [];
+    if (ctx) ctx.close();
+    ctx = out = null;
+    showState();
   }
 
   function log(t, midi, on) {
@@ -79,7 +90,7 @@ function render({ model, el }) {
   }
 
   function startVoice(midi) {
-    ensureContext();
+    start();
     let source;
     if (model.get("mode") === "wavetable") {
       source = ctx.createBufferSource();
@@ -108,7 +119,7 @@ function render({ model, el }) {
     source.connect(amp).connect(out);
     source.start(now);
 
-    const voice = { midi, source, amp, t: now, stopped: false };
+    const voice = { midi, source, amp, t: now, stopped: false, ctx };
     active.push(voice);
     source.onended = () => {
       active = active.filter((v) => v !== voice);
@@ -119,7 +130,7 @@ function render({ model, el }) {
 
   // Release a voice: from its current envelope level down to 0.
   function stopVoice(voice, release) {
-    if (voice.stopped) return;
+    if (voice.stopped || voice.ctx !== ctx) return; // already stopped by Stop
     voice.stopped = true;
     const now = ctx.currentTime;
     log(now, voice.midi, 0);
@@ -136,14 +147,45 @@ function render({ model, el }) {
     voice.source.stop(now + release + 0.02);
   }
 
-  const keys = createKeys(model, el, {
+  // ----- controls ----------------------------------------------------------
+
+  const power = uiButton({ icon: "play", label: "Start", onClick: () => (ctx ? stop() : start()) });
+  ui.actions.append(power);
+
+  const controls = createControls(model, ui, {
     onNoteOn: startVoice,
     onNoteOff: (voice) => stopVoice(voice, model.get("release")),
-    onFocus: ensureContext,
+    onFocus: () => {
+      start();
+      showState();
+    },
+    onBlur: showState,
+    // Genie mode picks among the notes this keyboard can play.
+    genieKeys: () =>
+      model.get("mode") === "bank" ? model.get("_notes").map(([midi]) => midi - GENIE_LOWEST_MIDI) : null,
   });
+
+  function showState() {
+    power.set(ctx ? { icon: "stop", label: "Stop" } : { icon: "play", label: "Start" });
+    if (!ctx) ui.status("idle", "stopped");
+    else if (controls && controls.listening()) ui.status("live", "listening");
+    else ui.status("ready", "on — click to play");
+  }
+
+  const describe = () => {
+    const notes = model.get("_notes");
+    ui.stats(
+      model.get("mode") === "wavetable"
+        ? "wavetable · any pitch · ADSR " + [model.get("attack"), model.get("decay"), model.get("sustain"), model.get("release")].join(" / ")
+        : "note bank · " + notes.length + " notes (" + noteName(notes[0][0]) + "–" + noteName(notes[notes.length - 1][0]) + ") · " + model.get("sample_rate") + " Hz",
+    );
+  };
+  describe();
+  showState();
 
   model.on("change:_pcm_b64", () => {
     if (ctx) buildSound();
+    describe();
   });
   model.on("msg:custom", (msg) => {
     if (msg && msg.type === "clear") {
@@ -153,9 +195,10 @@ function render({ model, el }) {
   });
 
   return () => {
-    keys.destroy();
+    controls.destroy();
     flush();
     if (ctx) ctx.close();
+    ui.destroy();
   };
 }
 

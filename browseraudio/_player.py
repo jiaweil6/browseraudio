@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import pathlib
 from typing import Optional
 
 import anywidget
 import numpy as np
 import traitlets
 
+from ._assets import _bundle
 from ._pcm import encode_f32
-
-_STATIC = pathlib.Path(__file__).parent / "static"
 
 
 class Player(anywidget.AnyWidget):
@@ -27,22 +25,34 @@ class Player(anywidget.AnyWidget):
         from browseraudio import play
         play(samples, sample_rate=48000)   # ▶ button; autoplays if allowed
 
-    Browsers block audio that starts without a user gesture, so if autoplay
-    is refused the **▶ Play** button always works.
+    Play and Stop work at any moment — from the widget's button, or from
+    Python with :meth:`play` / :meth:`stop`. Browsers block audio that starts
+    without a user gesture, so if autoplay is refused the **Play** button
+    always works.
 
     Attributes:
         sample_rate: Sample rate of the buffer, in Hz.
         n_channels: Number of channels (1 = mono, 2 = stereo).
         autoplay: Try to start playback as soon as the widget renders.
+        playing: Whether it is playing now (kept in sync with the browser).
     """
 
-    _esm = _STATIC / "player.js"
+    _esm = _bundle("ui.js", "player.js")
 
     sample_rate = traitlets.Int(0).tag(sync=True)
     n_channels = traitlets.Int(1).tag(sync=True)
     autoplay = traitlets.Bool(True).tag(sync=True)
+    playing = traitlets.Bool(False).tag(sync=True)
     # Channel-major (planar) float32 samples, base64 over the comm.
     _pcm_b64 = traitlets.Unicode("").tag(sync=True)
+
+    def play(self) -> None:
+        """Start playback from the beginning (as if Play were pressed)."""
+        self.playing = True
+
+    def stop(self) -> None:
+        """Stop playback."""
+        self.playing = False
 
 
 def play(samples, sample_rate: Optional[int] = None, *, autoplay: bool = True) -> Player:

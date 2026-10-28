@@ -240,3 +240,22 @@ def test_start_resets_counters():
     assert s.blocks_rendered == 2
     _msg(s, type="start")
     assert s.blocks_rendered == 0 and s.busy == 0.0 and s.dropouts == 0
+
+
+# ----- genie mode ---------------------------------------------------------------
+
+
+def test_stream_genie_settings():
+    s = Stream(lambda block: None, input="genie", genie_range=(48, 84), genie_temperature=0.5)
+    assert (s.input, s.genie_range, s.genie_temperature) == ("genie", [48, 84], 0.5)
+    assert Stream(lambda block: None).genie_range == [21, 108]  # the whole piano
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"input": "midi"}, {"genie_temperature": 2}, {"genie_range": (10, 60)},
+     {"genie_range": (80, 60)}, {"genie_range": (21, 120)}],
+)
+def test_stream_genie_validation(kwargs):
+    with pytest.raises(ValueError):
+        Stream(lambda block: None, **kwargs)

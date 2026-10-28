@@ -7,6 +7,22 @@ All notable changes to **browseraudio** are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Genie mode** on the keyboard widgets (`Keyboard`, `Stream`): `input="genie"`
+  or the widget's Keys | Genie control turns 8 buttons (`1`–`8` or
+  `A S D F J K L ;`) into piano music with
+  [Piano Genie](https://magenta.tensorflow.org/pianogenie) (Donahue, Simon &
+  Dieleman, IUI 2019), credited in the widget. Runs Magenta's published model
+  with inference ported to plain JavaScript (no TensorFlow.js); `Keyboard` keeps
+  the genie within its rendered notes, `Stream` within `genie_range`.
+  `genie_temperature` and `genie_checkpoint` (self-hosting) are configurable.
+- One widget family: every widget shares a look (title, status, transport,
+  stats), renders in a Shadow DOM so host CSS can't restyle it, and follows the
+  JupyterLab / JupyterLite theme or — on other pages such as thebe sites — the
+  page's own text colour and font, in light and dark.
+- Start/stop at any moment: `Player` gets Play/Stop with progress, plus
+  `play()` / `stop()` / `playing` in Python; `Recorder` can stop a take early
+  (keeping what was captured), shows a live input meter, and previews the take
+  with Play/Stop; `Keyboard` gets Start/Stop.
 - `stream(callback, sample_rate, block_size)` / `Stream` — real-time synthesis.
   The browser is the clock: an `AudioWorklet` plays a short queue of blocks and
   pulls each next one from a pyquist-style `callback(block)` running in the

@@ -15,9 +15,13 @@ thread (via a tiny [anywidget](https://anywidget.dev) frontend) and ferries the
 float32 samples across, so it works even when the kernel runs in a worker.
 
 > **Status:** recording, playback, **real-time synthesis** (a block callback
-> played live, controlled from the computer keyboard or any widget), and a
+> played live, controlled from the computer keyboard or any widget),
+> **[genie mode](#genie-mode)** (play with 8 buttons via
+> [Piano Genie](https://arxiv.org/abs/1810.03226)), and a
 > `sounddevice`-compatible facade (`browseraudio.sounddevice`, including
-> `OutputStream`). See the [roadmap](#roadmap) for what's next.
+> `OutputStream`). Every widget shares one look, starts and stops at any moment,
+> and adapts to its host — JupyterLab / JupyterLite themes (light and dark) or a
+> thebe-powered page. See the [roadmap](#roadmap) for what's next.
 
 ## Contents
 
@@ -25,11 +29,13 @@ float32 samples across, so it works even when the kernel runs in a worker.
 - [Install](#install)
 - [Live demo](#live-demo)
 - [Quickstart](#quickstart)
+- [Genie mode](#genie-mode)
 - [API reference](#api-reference)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Roadmap](#roadmap)
+- [Credits](#credits)
 - [License](#license)
 
 ## Requirements
@@ -77,10 +83,11 @@ read the result in the next.
 ```python
 from browseraudio import record
 
-rec = record(3.0)          # shows "● Record 3s" — click it, allow the mic, speak
+rec = record(3.0)          # shows "● Record 3 s" — click it, allow the mic, speak
 ```
 
-An inline player appears so you can hear the take. Then, **in a new cell**:
+Press **Stop** at any time to keep what you have so far; the widget then offers
+**Play** so you can hear the take. Then, **in a new cell**:
 
 ```python
 rec.samples                # float32 ndarray, shape (n_frames, 1)
@@ -104,8 +111,11 @@ play(rec.samples, rec.sample_rate)   # ▶ plays through the speakers
 play(rec.to_pyquist())               # sample_rate read from the pyquist.Audio
 ```
 
+**Play** and **Stop** work at any moment, from the widget or from Python
+(`player.play()`, `player.stop()`).
+
 > **Autoplay.** Browsers block audio that starts without a user gesture, so
-> playback may not start on its own — just click the **▶ Play** button the
+> playback may not start on its own — just click the **Play** button the
 > widget shows.
 
 ### Real-time synthesis
@@ -148,6 +158,34 @@ latency — try `block_size=1` and `block_size=16384`. Existing
 `sounddevice.OutputStream` code runs too, via
 [`browseraudio.sounddevice`](#browseraudiosounddevice).
 
+## Genie mode
+
+Every keyboard widget (`keyboard()` and `stream()`) has two ways to play,
+switched with its **Keys | Genie** control or with `input=` in Python:
+
+- **Keys** — "musical typing": `A W S E D F …` play a chromatic octave and a
+  half, `Z` / `X` shift the octave.
+- **Genie** — eight buttons (`1`–`8`, or `A S D F J K L ;` on the home row).
+  Press them in any rhythm and contour you like — lower buttons for lower
+  notes, higher for higher — and the genie turns them into a melody on the
+  full 88-key piano.
+
+```python
+kb = keyboard(pluck, 22050, input="genie")          # notes limited to the ones kb can play
+s = stream(synth.callback, input="genie", on_note=on_note,
+           genie_range=(48, 84))                    # on_note gets the genie's notes
+```
+
+Genie mode is **[Piano Genie](https://magenta.tensorflow.org/pianogenie)** by
+Chris Donahue, Ian Simon and Sander Dieleman (IUI 2019, [arXiv:1810.03226](https://arxiv.org/abs/1810.03226)):
+a recurrent network trained to map 8-button performances to piano music. browseraudio
+runs the trained model Magenta publishes, with its inference ported from
+Magenta.js to plain JavaScript (no TensorFlow.js), so each press costs well under a
+millisecond; only the ~1.2 MB of weights are downloaded, once, from Magenta's
+storage (`genie_checkpoint=` points elsewhere to self-host). `genie_temperature`
+(0–1, default 0.25 as in the original demo) trades predictability for variety.
+Please [cite Piano Genie](#credits) when you use genie mode in your work.
+
 ## API reference
 
 ### `record(duration=3.0)`
@@ -172,7 +210,7 @@ through the page's speakers on the browser's main thread. A drop-in shape for
 |---|---|---|---|
 | `samples` | array-like | — | Audio as `(n_frames,)` or `(n_frames, n_channels)`, values in `[-1, 1]`. |
 | `sample_rate` | `int` | `None` | Sample rate in Hz. If `None`, read from `samples.sample_rate` (e.g. a `pyquist.Audio`). |
-| `autoplay` | `bool` | `True` | Try to start immediately; falls back to the **▶ Play** button if the browser blocks autoplay. |
+| `autoplay` | `bool` | `True` | Try to start immediately; falls back to the **Play** button if the browser blocks autoplay. |
 
 **Returns** a `Player`. **Raises** `ValueError` if `samples` isn't 1-D/2-D or no
 sample rate can be determined.
@@ -186,6 +224,11 @@ resamples to its own rate, so any `sample_rate` is fine. Use
 [`play()`](#playsamples-sample_rate--autoplaytrue) rather than constructing it
 directly.
 
+| Member | Description |
+|---|---|
+| `play()` / `stop()` | Start (from the beginning) or stop playback — same as the widget's **Play** / **Stop**. |
+| `playing` | Whether it is playing now (kept in sync with the browser). |
+
 ### `stream(callback, sample_rate=44100, block_size=512, **kwargs)`
 
 Create a [`Stream`](#stream), display it, and return it — real-time synthesis
@@ -198,8 +241,11 @@ from a block callback, played live in the browser.
 | `block_size` | `int` | `512` | Frames per block (B). |
 | `channels` | `int` | `1` | Output channels. |
 | `lookahead` | `float` | `0.04` | Seconds of audio kept queued in the browser (rounded up to whole blocks, at least two). Below the kernel round trip, the stream drops out. |
-| `on_note` | callable | `None` | `on_note(midi, is_on)` for each key press / release on the widget. |
+| `on_note` | callable | `None` | `on_note(midi, is_on)` for each key press / release on the widget (in either input mode). |
 | `keymap` | `KeyMap` | musical typing | Which computer keys play which notes (see [`KeyMap`](#keymap)). |
+| `input` | `str` | `"keys"` | `"keys"` (musical typing) or `"genie"` ([genie mode](#genie-mode)); switchable on the widget. |
+| `genie_range` | `(int, int)` | `(21, 108)` | Lowest and highest MIDI note genie mode may play. |
+| `genie_temperature`, `genie_checkpoint` | | `0.25`, Magenta's model | See [genie mode](#genie-mode). |
 
 ### `Stream`
 
@@ -236,6 +282,11 @@ per playable note, with `sample_rate`) or `wavetable=` one cycle of a waveform
 | `one_shot` | `False` | Note-bank mode: play each note to its end, ignoring key-up. |
 | `max_voices` | `16` | Polyphony; the oldest voice is stolen beyond it. |
 | `keymap` | musical typing | See [`KeyMap`](#keymap). |
+| `input` | `"keys"` | `"keys"` or `"genie"` ([genie mode](#genie-mode) picks among the notes this keyboard can play). |
+| `genie_temperature`, `genie_checkpoint` | `0.25`, Magenta's model | See [genie mode](#genie-mode). |
+
+The widget's **Start** / **Stop** turns its audio on and off (clicking the keys,
+or just playing, starts it again).
 
 ### `Keyboard`
 
@@ -251,7 +302,7 @@ per playable note, with `sample_rate`) or `wavetable=` one cycle of a waveform
 Maps computer keys to MIDI notes through a small state machine: pressing
 `keys[i]` looks up `table[state][i] -> (midi, next_state)`, plays `midi` (unless
 `None`) and moves to `next_state` — so octave keys are entries that only change
-state, and context-dependent (Piano-Genie-style) mappings fit the same table.
+state, and other context-dependent mappings fit the same table.
 Keys are `KeyboardEvent.code` names (`"KeyA"`, `"Semicolon"`), so the physical
 layout is the same on QWERTY and AZERTY. `KeyMap.musical_typing(base=60,
 octaves=(-1, 0, 1))` is the DAW-style default.
@@ -260,7 +311,9 @@ octaves=(-1, 0, 1))` is the DAW-style default.
 
 An [anywidget](https://anywidget.dev) that records from the microphone. Display
 it (or use [`record()`](#record-duration30)), click **Record**, then read its
-attributes in a *separate* cell once capture finishes.
+attributes in a *separate* cell once capture finishes. **Stop** ends a take early
+and keeps what was captured; a live meter shows the input level, and **Play**
+previews the take.
 
 ```python
 from browseraudio import Recorder
@@ -346,6 +399,12 @@ Under the hood, audio crosses the comm as base64-encoded float32. Recording uses
 `ScriptProcessorNode` to accumulate `duration` seconds before sending it up;
 playback hands a buffer to a one-shot `AudioBufferSourceNode`.
 
+Every widget renders inside a Shadow DOM, so a host page's CSS can't restyle
+it. In a Jupyter frontend (JupyterLab, JupyterLite, Notebook 7) it takes its
+colours and fonts from the notebook theme; on any other page — thebe on a course
+site — it derives them from the page's own text colour and font, so it fits light
+and dark pages alike.
+
 Real-time synthesis turns the flow around: the **browser is the clock**. An
 `AudioWorklet` plays a short queue of blocks and, as each finishes, the page asks
 the kernel for the next; the kernel answers by running your callback. Because
@@ -366,6 +425,7 @@ blocks.
 | **A stream crackles (dropouts)** | The kernel didn't answer in time: a cell is running (blocks are only made while the kernel is idle), the callback is slower than real time (see "% of budget"), or the queue is shorter than the round trip — raise `lookahead`. |
 | **A stream started from code is silent** | The browser's autoplay policy kept audio off; click **🔈 Click to enable audio** on the widget. |
 | **Keys don't play** | Click the widget first — it only listens while focused (so typing in cells never plays notes). |
+| **Genie mode says it couldn't load the model** | The ~1.2 MB Piano Genie weights come from `storage.googleapis.com`; that host must be reachable. To work offline or behind a firewall, serve the checkpoint yourself and pass `genie_checkpoint="https://…/your/copy"`. |
 
 ## Development
 
@@ -389,19 +449,24 @@ Project layout:
 | `browseraudio/_keyboard.py` | The `Keyboard` widget, `keyboard()`, and `KeyMap`. |
 | `browseraudio/sounddevice.py` | The `sounddevice`-shaped facade, including `OutputStream`. |
 | `browseraudio/_pcm.py` | The base64 float32 wire format. |
+| `browseraudio/_assets.py` | Bundles the frontends; genie mode's checkpoint URL. |
+| `browseraudio/static/ui.js` | The shared look and controls of every widget (Shadow DOM, theming). |
 | `browseraudio/static/recorder.js` | Recorder frontend — Web Audio capture. |
 | `browseraudio/static/player.js` | Player frontend — Web Audio playback. |
 | `browseraudio/static/stream.js` | Stream frontend — the AudioWorklet and block requests. |
 | `browseraudio/static/keyboard.js` | Keyboard frontend — note voicing. |
-| `browseraudio/static/keys.js` | The computer-keyboard control surface shared by Stream and Keyboard. |
+| `browseraudio/static/controls.js` | How you play Stream and Keyboard: Keys (musical typing) and Genie modes. |
+| `browseraudio/static/genie.js` | Genie mode: Piano Genie's model, run in plain JavaScript. |
 | `tests/` | The `pytest` suite (Python side, headless). |
 | `demo/` | Static demo site, published to [GitHub Pages](https://jiaweil6.github.io/browseraudio/). |
 | `pyproject.toml` | Packaging metadata; `static/*.js` is shipped as package data. |
 
 The [`tests/`](tests) suite covers the Python side headlessly — the base64↔NumPy
-transport, array shapes, validation, and version sync — and runs in CI on every
-push and pull request across Python 3.9–3.13. (The browser frontend's Web Audio
-path isn't unit-tested yet.) Contributions and issues are welcome.
+transport, array shapes, validation, the real-time block loop, and version sync —
+plus genie mode's model (`genie.js`, run under Node when it's installed, against
+a NumPy reference). It runs in CI on every push and pull request across Python
+3.9–3.13. (The browser frontends' Web Audio paths aren't unit-tested yet.)
+Contributions and issues are welcome.
 
 ## Roadmap
 
@@ -418,11 +483,32 @@ path isn't unit-tested yet.) Contributions and issues are welcome.
   queue plus a kernel round trip (~50–100 ms). _(Unreleased)_
 - ✅ **Keyboard synth** — `keyboard()`: sounds designed in NumPy, voiced in the
   browser with no kernel round trip. _(Unreleased)_
-- **Piano-Genie-style mappings** — context-dependent `KeyMap` tables from a
-  Python function.
+- ✅ **Genie mode** — play with 8 buttons via
+  [Piano Genie](https://magenta.tensorflow.org/pianogenie). _(Unreleased)_
+- ✅ **One widget family** — a shared look, start/stop everywhere, and theming
+  that follows JupyterLab or the host page. _(Unreleased)_
 - **AudioWorklet capture** — replace the deprecated `ScriptProcessorNode` in
   `Recorder`.
 - **Binary comm transport** — send raw buffers instead of base64.
+
+## Credits
+
+Genie mode is [Piano Genie](https://magenta.tensorflow.org/pianogenie), and runs
+the trained model published by [Magenta](https://magenta.tensorflow.org/)
+(Apache-2.0), with inference ported from
+[Magenta.js](https://github.com/magenta/magenta-js) (Apache-2.0). If you use
+genie mode in your work, please cite:
+
+```bibtex
+@inproceedings{donahue2019pianogenie,
+  title     = {Piano Genie},
+  author    = {Donahue, Chris and Simon, Ian and Dieleman, Sander},
+  booktitle = {Proceedings of the 24th International Conference on Intelligent User Interfaces},
+  pages     = {160--164},
+  year      = {2019},
+  doi       = {10.1145/3301275.3302288}
+}
+```
 
 ## License
 
