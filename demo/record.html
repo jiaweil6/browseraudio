@@ -45,7 +45,11 @@
   </div>
 
   <div class="step-h"><span class="n">01</span><h2>Record three seconds</h2></div>
-  <p>Run the cell, click <b>● Record</b>, and allow the microphone. An inline player appears so you can hear the take.</p>
+  <p>
+    Run the cell, click <b>● Record</b>, and allow the microphone. Press <b>Stop</b> any time to
+    keep what you have; then <b>Play</b> hears the take. Sing or hum one steady note — the next
+    cells turn it into an instrument.
+  </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="record">▶ Run</button></div>
 <pre class="cell-code"><code><span class="k">from</span> browseraudio <span class="k">import</span> record
@@ -55,18 +59,48 @@ rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c
   </div>
 
   <div class="step-h"><span class="n">02</span><h2>Inspect the array</h2></div>
-  <p>The take is an ordinary NumPy array — float32, shape <code>(n_frames, 1)</code> — that you can slice, plot, or hand to a DSP library.</p>
+  <p>
+    The take is an ordinary NumPy array — float32, shape <code>(n_frames, 1)</code> — that you can
+    slice, plot, or hand to a DSP library.
+  </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="inspect">▶ Run</button></div>
 <pre class="cell-code"><code>rec.samples.shape, rec.sample_rate</code></pre>
     <div class="cell-out" data-out="inspect" hidden></div>
   </div>
-
   <p class="callout">
-    <b>In a notebook, this is two cells.</b> Recording finishes <em>after</em> the cell
-    that calls <code>record()</code> returns, so you read <code>rec.samples</code> in the
-    next cell — <a href="how-it-works.html#two-cells">why</a>.
+    <b>In a notebook, this is two cells.</b> Recording finishes <em>after</em> the cell that calls
+    <code>record()</code> returns, so you read <code>rec.samples</code> in the next cell —
+    <a href="how-it-works.html#two-cells">why</a>.
   </p>
+
+  <div class="step-h"><span class="n">03</span><h2>Your voice as an instrument</h2></div>
+  <p>
+    A sampler in a dozen lines: every key plays your take, read faster for higher notes and
+    slower for lower ones (it's treated as middle C). Click the keyboard and play a chord of
+    yourself — or switch to <b>Genie</b> and let the genie sing.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="voice">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> browseraudio <span class="k">import</span> keyboard
+
+sr = <span class="n">16000</span>                                         <span class="c"># plenty for a voice, light to ship</span>
+take = rec.samples[:, <span class="n">0</span>]
+take = np.<span class="f">interp</span>(np.<span class="f">arange</span>(<span class="n">0</span>, <span class="f">len</span>(take), rec.sample_rate / sr),   <span class="c"># resample to `sr`</span>
+                 np.<span class="f">arange</span>(<span class="f">len</span>(take)), take)
+take = take / (np.<span class="f">abs</span>(take).<span class="f">max</span>() + <span class="n">1e-9</span>)          <span class="c"># normalize</span>
+
+<span class="k">def</span> <span class="f">voice</span>(freq):
+    <span class="c"># Read the take faster for higher notes, slower for lower (it was "middle C").</span>
+    pos = np.<span class="f">arange</span>(<span class="n">0</span>, <span class="f">len</span>(take) - <span class="n">1</span>, freq / <span class="n">261.63</span>)[: sr]   <span class="c"># at most 1 s per note</span>
+    i = pos.<span class="f">astype</span>(int)
+    y = take[i] + (pos - i) * (take[i + <span class="n">1</span>] - take[i])
+    <span class="k">return</span> <span class="n">0.5</span> * y * np.<span class="f">minimum</span>(<span class="n">1</span>, np.<span class="f">arange</span>(<span class="f">len</span>(y)) / (<span class="n">0.01</span> * sr))  <span class="c"># 10 ms fade-in</span>
+
+kb = <span class="f">keyboard</span>(voice, sr, release=<span class="n">0.15</span>)</code></pre>
+    <div class="cell-out" data-out="voice" hidden></div>
+  </div>
 
   <hr class="rule" />
   <p>Got audio? <a href="play.html">Head to the Play page <span class="arr">→</span></a> to push a buffer back to the speakers.</p>

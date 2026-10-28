@@ -57,7 +57,8 @@ def test_musical_typing_needs_octave_zero():
 
 def test_keymap_to_dict_is_json_shaped():
     km = KeyMap(["KeyA", "KeyB"], [[(60, 0), (None, 0)]])
-    assert km.to_dict() == {"keys": ["KeyA", "KeyB"], "table": [[[60, 0], [None, 0]]], "start": 0}
+    assert km.to_dict() == {"keys": ["KeyA", "KeyB"], "table": [[[60, 0], [None, 0]]], "start": 0,
+                            "labels": None}
 
 
 @pytest.mark.parametrize(
@@ -75,6 +76,14 @@ def test_keymap_to_dict_is_json_shaped():
 def test_keymap_validation(keys, table, start):
     with pytest.raises(ValueError):
         KeyMap(keys, table, start)
+
+
+def test_keymap_labels():
+    km = KeyMap(["KeyA", "KeyS"], [[(36, 0), (38, 0)]], labels=["kick", "snare"])
+    assert km.to_dict()["labels"] == ["kick", "snare"]
+    assert KeyMap.musical_typing().to_dict()["labels"] is None
+    with pytest.raises(ValueError):
+        KeyMap(["KeyA", "KeyS"], [[(36, 0), (38, 0)]], labels=["kick"])
 
 
 def test_genie_style_state_machine_is_expressible():
@@ -108,6 +117,18 @@ def test_bank_notes_may_differ_in_length():
     lengths = [n[2] for n in kb._notes]
     assert lengths == [int(midi_to_hz(60) // 100), int(midi_to_hz(72) // 100)]
     assert kb._notes[1][1] == lengths[0]
+
+
+def test_bank_notes_end_with_a_short_fade():
+    # A note whose sound hasn't decayed by the end of its buffer mustn't click:
+    # its last 5 ms fade to silence — without touching the caller's array.
+    raw = np.ones(400, dtype=np.float32)
+    kb = Keyboard(lambda f: raw, SR, keymap=KeyMap(["KeyA"], [[(60, 0)]]))
+    note = _decode(kb._pcm_b64)
+    n_fade = int(0.005 * SR)  # 40 samples at 8 kHz
+    assert np.allclose(note[:-n_fade], 1.0)
+    assert np.allclose(note[-n_fade:], np.linspace(1, 0, n_fade))
+    assert np.all(raw == 1.0)
 
 
 def test_bank_accepts_column_vectors():
@@ -229,15 +250,19 @@ def test_render_applies_release_and_buffer_end():
     kb.events = [(0.0, 60, "on"), (0.001, 60, "off")]
     y = kb.render()[:, 0]
     assert y.size == 12  # 8 held + 8 release, cut at the 12-sample buffer
-    assert np.allclose(y[:8], 0.5)
-    assert np.allclose(y[8:], 0.5 * (1 - np.arange(4) / 8))
+    buf = np.ones(12)
+    buf[-6:] *= np.linspace(1, 0, 6)  # the stored note's tail fade (half its length here)
+    env = np.concatenate([np.ones(8), 1 - np.arange(4) / 8])
+    assert np.allclose(y, 0.5 * buf * env)
 
 
 def test_render_one_shot_ignores_key_up():
     km = KeyMap(["KeyA"], [[(60, 0)]])
     kb = Keyboard(_ones(40), SR, keymap=km, attack=0.0, gain=1.0, one_shot=True)
     kb.events = [(0.0, 60, "on"), (0.001, 60, "off")]
-    assert np.allclose(kb.render()[:, 0], np.ones(40))
+    expected = np.ones(40)
+    expected[-20:] *= np.linspace(1, 0, 20)  # tail fade
+    assert np.allclose(kb.render()[:, 0], expected)
 
 
 def test_render_releases_notes_still_held_at_the_end():

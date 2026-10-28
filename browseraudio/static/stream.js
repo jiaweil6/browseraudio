@@ -13,6 +13,11 @@
 //
 // Blocks travel in batches (one message, several blocks back to back, each
 // planar) so tiny block sizes don't mean one message per block.
+//
+// No clicks from the plumbing: if the queue runs dry (a dropout) the worklet
+// lets the last sample decay over a few milliseconds instead of jumping to
+// zero, fades the stream back in when blocks resume (and at start), and Stop
+// fades the output out before closing.
 
 const STATS_MS = 250;
 const MIN_BATCH_S = 0.005; // don't ask Python for less than ~5 ms of audio at once
@@ -27,6 +32,11 @@ class BrowseraudioStream extends AudioWorkletProcessor {
     this.started = false; // first block arrived; silence before it isn't a dropout
     this.dry = false;
     this.dropouts = 0;
+    this.g = 0; // fade-in gain of the stream's own samples
+    this.tail = []; // per channel: a decaying echo of the last value after a gap
+    this.last = []; // per channel: the last sample written
+    this.fadeStep = 1 / Math.round(0.004 * sampleRate); // 4 ms fade-in
+    this.decay = Math.exp(-1 / (0.004 * sampleRate)); // ~4 ms decay
     this.port.onmessage = (e) => {
       this.queue.push(e.data);
       this.started = true;
@@ -42,7 +52,18 @@ class BrowseraudioStream extends AudioWorkletProcessor {
     while (i < n) {
       const batch = this.queue[0];
       if (!batch) {
-        for (const ch of out) ch.fill(0, i);
+        // Ran dry: hold the last value and let it decay, rather than a jump to 0.
+        for (let c = 0; c < channels; c++) {
+          let t = this.dry ? this.tail[c] || 0 : this.last[c] || 0;
+          const dst = out[c];
+          for (let k = i; k < n; k++) {
+            dst[k] = t;
+            t *= this.decay;
+          }
+          this.tail[c] = Math.abs(t) < 1e-6 ? 0 : t;
+          this.last[c] = dst[n - 1];
+        }
+        this.g = 0;
         if (this.started && !this.dry) {
           this.dry = true;
           this.dropouts++;
@@ -56,8 +77,18 @@ class BrowseraudioStream extends AudioWorkletProcessor {
       const take = Math.min(n - i, B - offset);
       for (let c = 0; c < channels; c++) {
         const from = base + c * B + offset;
-        out[c].set(batch.subarray(from, from + take), i);
+        const dst = out[c];
+        let g = this.g;
+        let t = this.tail[c] || 0;
+        for (let k = 0; k < take; k++) {
+          if (g < 1) g = Math.min(1, g + this.fadeStep);
+          dst[i + k] = g * batch[from + k] + t; // fade in over any decaying tail
+          t *= this.decay;
+        }
+        this.tail[c] = Math.abs(t) < 1e-6 ? 0 : t;
+        this.last[c] = dst[i + take - 1];
       }
+      this.g = Math.min(1, this.g + take * this.fadeStep);
       i += take;
       this.pos += take;
       if (this.pos % B === 0) {
@@ -80,6 +111,7 @@ function render({ model, el }) {
   const ui = mountUI(el, keyboard ? "Stream" : "Output stream");
   let ctx = null;
   let node = null;
+  let master = null; // output gain, so Stop can fade out instead of cutting
   let running = false;
   let queued = 0; // blocks in the worklet's FIFO (including the one playing)
   let inflight = 0; // blocks requested from Python, not yet arrived
@@ -191,16 +223,24 @@ function render({ model, el }) {
       }
       if (e.data.dropouts) dropouts = e.data.dropouts;
     };
-    node.connect(ctx.destination);
+    master = ctx.createGain();
+    node.connect(master).connect(ctx.destination);
     showState();
     request();
   }
 
   function stop() {
     running = false;
-    if (node) node.disconnect();
-    if (ctx) ctx.close();
-    node = ctx = null;
+    const [c, n, m] = [ctx, node, master];
+    node = ctx = master = null;
+    if (c) {
+      // Fade out over ~10 ms, then tear down.
+      if (m) m.gain.setTargetAtTime(0, c.currentTime, 0.008);
+      setTimeout(() => {
+        if (n) n.disconnect();
+        c.close();
+      }, m ? 80 : 0);
+    }
     showState();
     model.send({ type: "stop" });
   }

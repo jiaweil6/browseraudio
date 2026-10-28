@@ -46,57 +46,61 @@
 
   <div class="step-h"><span class="n">01</span><h2>A callback with state</h2></div>
   <p>
-    The control (the pitch) is read once per block, and the phase is <b>state</b>,
-    carried from one block to the next so the sine never jumps. With no key held the
-    pitch is <code>None</code> and the block stays silent. Run the cell, press
-    <b>▶ Start</b>, click the keyboard, then hold keys: <code>A S D F G H J K L ;</code>
-    are the white keys, <code>W E T Y U O P</code> the black keys, <code>Z</code> /
-    <code>X</code> shift the octave.
+    The control (the pitch) is read once per block, and the phase is <b>state</b>, carried
+    from block to block so the sine never jumps. The amplitude is state too: each block glides
+    from the last level to the new one — <b>de-zippering</b> — so notes start and stop without a
+    click. Run the cell, press <b>▶ Start</b>, click the keyboard, then hold keys:
+    <code>A S D F G H J K L ;</code> are the white keys, <code>W E T Y U O P</code> the black
+    keys, <code>Z</code> / <code>X</code> shift the octave. One sine, one note at a time: a new key
+    takes over.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-sine">▶ Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
 <span class="k">from</span> browseraudio <span class="k">import</span> stream
 
+SR = <span class="n">44100</span>
+
 <span class="k">class</span> <span class="f">Sinusoid</span>:
     <span class="k">def</span> <span class="f">__init__</span>(self):
-        self.pitch, self.phase = <span class="k">None</span>, <span class="n">0.0</span>  <span class="c"># None: no key held</span>
+        self.pitch, self.phase = <span class="n">60</span>, <span class="n">0.0</span>
+        self.on = <span class="k">False</span>                      <span class="c"># is a key held?</span>
+        self.amp = <span class="n">0.0</span>                       <span class="c"># level at the end of the last block</span>
 
-    <span class="k">def</span> <span class="f">callback</span>(self, block):           <span class="c"># block: (B, 1), with .sample_rate</span>
-        <span class="k">if</span> self.pitch <span class="k">is</span> <span class="k">None</span>:              <span class="c"># read the control once</span>
-            <span class="k">return</span>                          <span class="c"># the block stays silent</span>
-        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)
+    <span class="k">def</span> <span class="f">callback</span>(self, block):               <span class="c"># block: (B, 1), with .sample_rate</span>
         B = <span class="f">len</span>(block)
+        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)            <span class="c"># read the controls once</span>
+        target = <span class="n">0.3</span> <span class="k">if</span> self.on <span class="k">else</span> <span class="n">0.0</span>
+        amp = np.<span class="f">linspace</span>(self.amp, target, B, endpoint=<span class="k">False</span>)  <span class="c"># glide to it: no clicks</span>
         dphase = <span class="n">2</span> * np.pi * f / block.sample_rate
-        block[:] = <span class="n">0.3</span> * np.<span class="f">sin</span>(self.phase + dphase * np.<span class="f">arange</span>(B))[:, np.newaxis]
+        block[:] = (amp * np.<span class="f">sin</span>(self.phase + dphase * np.<span class="f">arange</span>(B)))[:, np.newaxis]
         self.phase = (self.phase + dphase * B) % (<span class="n">2</span> * np.pi)
+        self.amp = target
 
 synth = <span class="f">Sinusoid</span>()
 
 <span class="k">def</span> <span class="f">on_note</span>(midi, on):
     <span class="k">if</span> on:
-        synth.pitch = midi                  <span class="c"># a new key: glide, keep the phase</span>
-    <span class="k">elif</span> midi == synth.pitch:               <span class="c"># the sounding key was released</span>
-        synth.pitch = <span class="k">None</span>
+        synth.pitch, synth.on = midi, <span class="k">True</span>   <span class="c"># a new key takes over, phase intact</span>
+    <span class="k">elif</span> midi == synth.pitch:
+        synth.on = <span class="k">False</span>                     <span class="c"># the sounding key was released</span>
 
-s = <span class="f">stream</span>(synth.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note)</code></pre>
+s = <span class="f">stream</span>(synth.callback, sample_rate=SR, block_size=<span class="n">512</span>, on_note=on_note)</code></pre>
     <div class="cell-out" data-out="rt-sine" hidden></div>
   </div>
-
   <p class="callout">
-    Python never keeps time here: the page's audio thread plays a short queue of blocks
-    and asks the kernel for the next one as each finishes. So a key press is heard after
-    the <b>queued audio</b> plus one <b>round trip</b> to the kernel — the widget shows
-    both, live.
+    Python never keeps time here: the page's audio thread plays a short queue of blocks and asks
+    the kernel for the next one as each finishes. So a key press is heard after the
+    <b>queued audio</b> plus one <b>round trip</b> to the kernel — the widget shows both, live.
   </p>
 
   <div class="step-h"><span class="n">02</span><h2>Block size: time budget vs. latency</h2></div>
   <p>
-    Every block must be ready before the one ahead of it finishes playing. Small blocks
-    mean many callback calls per second — watch <b>% of budget</b> climb at
-    <code>B = 1</code>. Big blocks are cheap, but your key presses wait behind them —
-    at <code>B = 16384</code> notes arrive late and quick ones are skipped entirely.
-    Change the size, run the cell, and press <b>▶ Start</b> again.
+    Every block must be ready before the one ahead of it finishes playing. Small blocks mean
+    many callback calls per second — watch <b>% of budget</b> climb at <code>B = 1</code>. Big
+    blocks are cheap, but your key presses wait behind them — at <code>B = 16384</code> notes
+    arrive late and quick ones are skipped entirely. Change the size, run the cell, and press
+    <b>▶ Start</b> again.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-blocksize">▶ Run</button></div>
@@ -104,63 +108,86 @@ s = <span class="f">stream</span>(synth.callback, sample_rate=<span class="n">44
     <div class="cell-out" data-out="rt-blocksize" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">03</span><h2>A live wavetable synth</h2></div>
+  <div class="step-h"><span class="n">03</span><h2>Polyphony: one voice per key</h2></div>
   <p>
-    Read one cycle of a waveform at a speed set by the pitch, with linear interpolation.
-    Releasing the key silences the block and resets the read position, so the next note
-    starts at the top of the table; switching keys while one is held keeps the phase.
+    Real instruments play chords. Give every held key its own <b>voice</b> — here a
+    wavetable read at the note's speed — shaped by an <b>envelope</b> that glides up when the key
+    goes down (attack) and fades away after it's released (release). The callback mixes all
+    sounding voices, and a soft clip (<code>tanh</code>) keeps big chords from distorting. Hold
+    several keys at once.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-wavetable">▶ Run</button></div>
-<pre class="cell-code"><code>s.<span class="f">stop</span>()                          <span class="c"># stop the stream above</span>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-poly">▶ Run</button></div>
+<pre class="cell-code"><code>s.<span class="f">stop</span>()                                     <span class="c"># stop the stream above</span>
 
-M = <span class="n">2048</span>
-m = np.<span class="f">arange</span>(M)
-table = <span class="f">sum</span>(a * np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * k * m / M) <span class="k">for</span> k, a <span class="k">in</span> <span class="f">enumerate</span>([<span class="n">1</span>, <span class="n">0.5</span>, <span class="n">0.5</span>, <span class="n">0.25</span>], <span class="n">1</span>))
+M = <span class="n">2048</span>                                     <span class="c"># one cycle of a soft, organ-like wave</span>
+table = <span class="f">sum</span>(a * np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * k * np.<span class="f">arange</span>(M) / M)
+            <span class="k">for</span> k, a <span class="k">in</span> <span class="f">enumerate</span>([<span class="n">1</span>, <span class="n">0.5</span>, <span class="n">0.3</span>, <span class="n">0.2</span>, <span class="n">0.1</span>], <span class="n">1</span>)) / <span class="n">2</span>
 
-<span class="k">class</span> <span class="f">Wavetable</span>:
-    <span class="k">def</span> <span class="f">__init__</span>(self):
-        self.pitch, self.pos = <span class="k">None</span>, <span class="n">0.0</span>  <span class="c"># None: no key held</span>
+<span class="k">class</span> <span class="f">Voice</span>:
+    <span class="s">"""One note: a waveform shaped by an envelope that glides, never jumps."""</span>
+    attack, release = <span class="n">0.01</span>, <span class="n">0.25</span>             <span class="c"># seconds (time constants)</span>
+
+    <span class="k">def</span> <span class="f">__init__</span>(self, pitch):
+        self.f = <span class="n">440</span> * <span class="n">2</span> ** ((pitch - <span class="n">69</span>) / <span class="n">12</span>)
+        self.held, self.level, self.k = <span class="k">True</span>, <span class="n">0.0</span>, <span class="n">0</span>   <span class="c"># k: samples played so far</span>
+
+    <span class="k">def</span> <span class="f">envelope</span>(self, n):
+        target, tau = (<span class="n">1.0</span>, self.attack) <span class="k">if</span> self.held <span class="k">else</span> (<span class="n">0.0</span>, self.release)
+        env = target + (self.level - target) * np.<span class="f">exp</span>(-np.<span class="f">arange</span>(<span class="n">1</span>, n + <span class="n">1</span>) / (tau * SR))
+        self.level = env[-<span class="n">1</span>]
+        <span class="k">return</span> env
+
+    <span class="k">def</span> <span class="f">wave</span>(self, k):                       <span class="c"># k: sample indices since the note began</span>
+        p = (k * self.f * M / SR) % M
+        i = p.<span class="f">astype</span>(int)
+        <span class="k">return</span> table[i] + (p - i) * (table[(i + <span class="n">1</span>) % M] - table[i])
+
+    <span class="k">def</span> <span class="f">render</span>(self, n):
+        out = self.<span class="f">envelope</span>(n) * self.<span class="f">wave</span>(self.k + np.<span class="f">arange</span>(n))
+        self.k += n
+        <span class="k">return</span> out
+
+<span class="k">class</span> <span class="f">Poly</span>:
+    <span class="s">"""Polyphony: one voice per held key, plus voices still fading out."""</span>
+    <span class="k">def</span> <span class="f">__init__</span>(self, kind=Voice):
+        self.kind, self.held, self.fading = kind, {}, []
+
+    <span class="k">def</span> <span class="f">on_note</span>(self, midi, on):
+        <span class="k">if</span> midi <span class="k">in</span> self.held:                <span class="c"># release the key's previous voice</span>
+            self.held[midi].held = <span class="k">False</span>
+            self.fading.<span class="f">append</span>(self.held.<span class="f">pop</span>(midi))
+        <span class="k">if</span> on:
+            self.held[midi] = self.<span class="f">kind</span>(midi)
 
     <span class="k">def</span> <span class="f">callback</span>(self, block):
-        <span class="k">if</span> self.pitch <span class="k">is</span> <span class="k">None</span>:
-            self.pos = <span class="n">0.0</span>              <span class="c"># the block stays silent</span>
-            <span class="k">return</span>
-        f = <span class="n">440</span> * <span class="n">2</span> ** ((self.pitch - <span class="n">69</span>) / <span class="n">12</span>)
-        step = f * M / block.sample_rate
-        p = (self.pos + step * np.<span class="f">arange</span>(<span class="f">len</span>(block))) % M
-        i = p.<span class="f">astype</span>(<span class="f">int</span>)
-        a = p - i
-        block[:, <span class="n">0</span>] = <span class="n">0.15</span> * ((<span class="n">1</span> - a) * table[i] + a * table[(i + <span class="n">1</span>) % M])
-        self.pos = (self.pos + step * <span class="f">len</span>(block)) % M
+        n = <span class="f">len</span>(block)
+        self.fading = [v <span class="k">for</span> v <span class="k">in</span> self.fading <span class="k">if</span> v.level &gt; <span class="n">1e-3</span>]
+        voices = [*self.held.<span class="f">values</span>(), *self.fading]
+        mix = <span class="f">sum</span>((v.<span class="f">render</span>(n) <span class="k">for</span> v <span class="k">in</span> voices), np.<span class="f">zeros</span>(n))
+        block[:, <span class="n">0</span>] = <span class="n">0.3</span> * np.<span class="f">tanh</span>(mix / <span class="n">2</span>)   <span class="c"># soft-clip: big chords stay smooth</span>
 
-wt = <span class="f">Wavetable</span>()
-
-<span class="k">def</span> <span class="f">on_note</span>(midi, on):
-    <span class="k">if</span> on:
-        wt.pitch = midi
-    <span class="k">elif</span> midi == wt.pitch:             <span class="c"># the held key was released</span>
-        wt.pitch = <span class="k">None</span>
-
-s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note)</code></pre>
-    <div class="cell-out" data-out="rt-wavetable" hidden></div>
+poly = <span class="f">Poly</span>()
+s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<span class="n">512</span>, on_note=poly.on_note)</code></pre>
+    <div class="cell-out" data-out="rt-poly" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">04</span><h2>Genie mode on a stream</h2></div>
+  <div class="step-h"><span class="n">04</span><h2>Genie mode: 8 buttons, a whole piano</h2></div>
   <p>
-    The same callback, played in <b>genie mode</b>: eight buttons (<code>1</code>–<code>8</code>
-    or <code>A S D F J K L ;</code>), and a neural network picks which piano key each press
-    becomes. Your <code>on_note</code> receives the genie's notes, so nothing else changes.
-    You can also flip the <b>Keys | Genie</b> switch on any stream above.
+    The same polyphonic synth in <b>genie mode</b>: eight buttons (<code>1</code>–<code>8</code>
+    or <code>A S D F J K L ;</code>), and a neural network decides which piano key each press
+    becomes — lower buttons lower, higher buttons higher. Your <code>on_note</code> receives the
+    genie's notes, so nothing else changes. Every stream above has the <b>Keys | Genie</b> switch
+    too.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-genie">▶ Run</button></div>
 <pre class="cell-code"><code>s.<span class="f">stop</span>()
-s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100</span>, block_size=<span class="n">512</span>, on_note=on_note,
-           input=<span class="s">"genie"</span>, genie_range=(<span class="n">48</span>, <span class="n">84</span>))   <span class="c"># C3 to C6</span></code></pre>
+poly = <span class="f">Poly</span>()
+s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<span class="n">512</span>, on_note=poly.on_note,
+           input=<span class="s">"genie"</span>, genie_range=(<span class="n">48</span>, <span class="n">84</span>))      <span class="c"># C3 to C6</span></code></pre>
     <div class="cell-out" data-out="rt-genie" hidden></div>
   </div>
-
   <p class="callout">
     Genie mode is <a href="https://magenta.tensorflow.org/pianogenie"><b>Piano Genie</b></a> —
     Chris Donahue, Ian Simon &amp; Sander Dieleman, <i>Piano Genie</i>, IUI 2019
@@ -169,13 +196,50 @@ s = <span class="f">stream</span>(wt.callback, sample_rate=<span class="n">44100
     if you use genie mode in your work.
   </p>
 
-  <div class="step-h"><span class="n">05</span><h2>sounddevice code, and any widget as a control</h2></div>
+  <div class="step-h"><span class="n">05</span><h2>FM synthesis, with live knobs</h2></div>
+  <p>
+    Swap the voice: <b>frequency modulation</b> wobbles a sine's phase with another sine,
+    which grows a whole family of overtones from two oscillators. The sliders are read once per
+    block while you play — move <b>index</b> for brightness and <b>ratio</b> for the character
+    (whole numbers sound tonal, halves bell-like). The index is de-zippered, so turning it never
+    clicks.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-fm">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">import</span> ipywidgets <span class="k">as</span> widgets
+
+ratio = widgets.<span class="f">FloatSlider</span>(value=<span class="n">2</span>, min=<span class="n">0.5</span>, max=<span class="n">7</span>, step=<span class="n">0.5</span>, description=<span class="s">"ratio"</span>)
+index = widgets.<span class="f">FloatSlider</span>(value=<span class="n">3</span>, min=<span class="n">0</span>, max=<span class="n">10</span>, step=<span class="n">0.1</span>, description=<span class="s">"index"</span>)
+
+<span class="k">class</span> <span class="f">FMVoice</span>(Voice):
+    <span class="s">"""Frequency modulation: a sine whose phase is wobbled by another sine."""</span>
+    <span class="k">def</span> <span class="f">__init__</span>(self, pitch):
+        <span class="f">super</span>().<span class="f">__init__</span>(pitch)
+        self.mod_phase, self.idx = <span class="n">0.0</span>, index.value
+
+    <span class="k">def</span> <span class="f">wave</span>(self, k):
+        n = <span class="f">len</span>(k)
+        dm = <span class="n">2</span> * np.pi * ratio.value * self.f / SR    <span class="c"># knobs: read once a block</span>
+        mod = np.<span class="f">sin</span>(self.mod_phase + dm * np.<span class="f">arange</span>(n))
+        self.mod_phase = (self.mod_phase + dm * n) % (<span class="n">2</span> * np.pi)
+        idx = np.<span class="f">linspace</span>(self.idx, index.value, n, endpoint=<span class="k">False</span>)  <span class="c"># de-zipper</span>
+        self.idx = index.value
+        <span class="k">return</span> np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * self.f * k / SR + idx * mod)
+
+s.<span class="f">stop</span>()
+fm = <span class="f">Poly</span>(FMVoice)
+s = <span class="f">stream</span>(fm.callback, sample_rate=SR, block_size=<span class="n">512</span>, on_note=fm.on_note)
+widgets.<span class="f">VBox</span>([ratio, index])</code></pre>
+    <div class="cell-out" data-out="rt-fm" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">06</span><h2>sounddevice code, and any widget as a control</h2></div>
   <p>
     Code written for <code>sounddevice.OutputStream</code> runs too: its
-    <code>callback(outdata, frames, time, status)</code> is pulled the same way. Any
-    widget can steer it — its value reaches the kernel between blocks. Moving the slider
-    multiplies the tone by a <b>ramp</b> from the previous level to the new one
-    (de-zippering), so the volume glides instead of clicking.
+    <code>callback(outdata, frames, time, status)</code> is pulled the same way. Any widget can
+    steer it — its value reaches the kernel between blocks. Moving the slider multiplies the
+    tone by a <b>ramp</b> from the previous level to the new one (de-zippering), so the volume
+    glides instead of clicking.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-outputstream">▶ Run</button></div>
@@ -200,10 +264,9 @@ out.<span class="f">start</span>()
 level</code></pre>
     <div class="cell-out" data-out="rt-outputstream" hidden></div>
   </div>
-
   <p class="callout">
-    Blocks are made only while no cell is running, so keep long computations out of the
-    way while a stream plays — a busy kernel is heard as dropouts.
+    Blocks are made only while no cell is running, so keep long computations out of the way
+    while a stream plays — a busy kernel is heard as dropouts.
   </p>
 
   <hr class="rule" />

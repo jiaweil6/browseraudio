@@ -45,11 +45,12 @@
 
   <div class="step-h"><span class="n">01</span><h2>Design a sound, then play it</h2></div>
   <p>
-    A function from frequency to samples — here a decaying sine "pluck". Python renders it
-    once for every note the keyboard can reach, then hands the bank to the page.
-    <b>Click the keyboard</b>, then play: <code>A S D F G H J K L ;</code> are the white keys,
-    <code>W E T Y U O P</code> the black keys, and <code>Z</code> / <code>X</code> shift
-    the octave.
+    A function from frequency to samples — a few harmonics, the higher ones dying faster, for
+    an electric-piano-ish tone. Python renders it once for every note the keyboard can reach,
+    then hands the bank to the page, which plays it with <b>no round trip</b> to Python — as
+    many notes at once as you like. <b>Click the keyboard</b>, then play:
+    <code>A S D F G H J K L ;</code> are the white keys, <code>W E T Y U O P</code> the black
+    keys, and <code>Z</code> / <code>X</code> shift the octave.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-pluck">▶ Run</button></div>
@@ -57,48 +58,65 @@
 <span class="k">from</span> browseraudio <span class="k">import</span> keyboard, play
 
 sr = <span class="n">22050</span>
-t = np.<span class="f">arange</span>(sr) / sr                  <span class="c"># one second</span>
+t = np.<span class="f">arange</span>(<span class="f">int</span>(<span class="n">1.2</span> * sr)) / sr                <span class="c"># 1.2 s per note</span>
 
 <span class="k">def</span> <span class="f">pluck</span>(freq):
-    <span class="k">return</span> np.<span class="f">sin</span>(<span class="n">2</span>*np.pi*freq*t) * np.<span class="f">exp</span>(-<span class="n">4</span>*t)
+    <span class="c"># a few harmonics, the higher ones dying faster — an electric-piano-ish tone</span>
+    tone = <span class="f">sum</span>(np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * k * freq * t) * np.<span class="f">exp</span>(-(<span class="n">1.5</span> + <span class="n">2.5</span> * k) * t) / k
+               <span class="k">for</span> k <span class="k">in</span> <span class="f">range</span>(<span class="n">1</span>, <span class="n">6</span>))
+    <span class="k">return</span> <span class="n">0.5</span> * tone * np.<span class="f">minimum</span>(<span class="n">1</span>, t / <span class="n">0.004</span>)   <span class="c"># 4 ms attack, no click</span>
 
-kb = <span class="f">keyboard</span>(pluck, sr)</code></pre>
+kb = <span class="f">keyboard</span>(pluck, sr, release=<span class="n">0.3</span>)</code></pre>
     <div class="cell-out" data-out="synth-pluck" hidden></div>
   </div>
-
   <p class="callout">
-    Your key presses never wait on Python: the sound is already in the page, so notes start
-    as fast as the browser's audio output allows. Python hears about them afterwards, as
+    Your key presses never wait on Python: the sound is already in the page, so notes start as
+    fast as the browser's audio output allows. Python hears about them afterwards, as
     <code>kb.events</code>.
   </p>
 
   <div class="step-h"><span class="n">02</span><h2>A wavetable with an envelope</h2></div>
   <p>
-    Or give one cycle of a waveform: the page loops it at any pitch and shapes each note
-    with an ADSR envelope, so notes sustain for as long as you hold the key.
+    Or give one cycle of a waveform: the page loops it at any pitch and shapes each note with
+    an ADSR envelope, so notes sustain for as long as you hold the key.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-wavetable">▶ Run</button></div>
-<pre class="cell-code"><code>cycle = np.<span class="f">linspace</span>(-<span class="n">1</span>, <span class="n">1</span>, <span class="n">256</span>)        <span class="c"># one sawtooth cycle</span>
-kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span>*cycle,
+<pre class="cell-code"><code>cycle = np.<span class="f">linspace</span>(-<span class="n">1</span>, <span class="n">1</span>, <span class="n">256</span>)                    <span class="c"># one sawtooth cycle</span>
+kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span> * cycle,
               attack=<span class="n">0.02</span>, decay=<span class="n">0.2</span>, sustain=<span class="n">0.6</span>, release=<span class="n">0.4</span>)</code></pre>
     <div class="cell-out" data-out="synth-wavetable" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">03</span><h2>Genie mode: 8 buttons, a whole piano</h2></div>
+  <div class="step-h"><span class="n">03</span><h2>Plucked strings, played by the genie</h2></div>
   <p>
-    Switch to <b>Genie</b> (or pass <code>input="genie"</code>) and play with just eight
-    buttons — <code>1</code>–<code>8</code>, or <code>A S D F J K L ;</code>. Press them in
-    any rhythm and contour: lower buttons for lower notes, higher for higher. A neural
-    network turns your button presses into a melody, here kept to the notes this
-    keyboard has rendered.
+    <b>Karplus–Strong</b> synthesis: a burst of noise circulating in a delay line one period
+    long, a little quieter and duller on every trip — and it sounds like a plucked string.
+    This keyboard starts in <b>genie mode</b>: play the eight buttons (<code>1</code>–<code>8</code>
+    or <code>A S D F J K L ;</code>) in any rhythm and contour, and a neural network turns them
+    into a melody. Switch to <b>Keys</b> any time.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-genie">▶ Run</button></div>
-<pre class="cell-code"><code>kb = <span class="f">keyboard</span>(pluck, sr, input=<span class="s">"genie"</span>)</code></pre>
-    <div class="cell-out" data-out="synth-genie" hidden></div>
-  </div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-strings">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">def</span> <span class="f">karplus_strong</span>(freq, seconds=<span class="n">1.4</span>, decay=<span class="n">1.0</span>):
+    <span class="s">"""A plucked string: a burst of noise circulating in a short, lossy delay line."""</span>
+    period = sr / freq                             <span class="c"># the loop must be one period long:</span>
+    M = <span class="f">int</span>(period)                                <span class="c"># whole samples...</span>
+    w = period - M                                 <span class="c"># ...plus a fraction (tap weighting)</span>
+    g = <span class="n">10</span> ** (-<span class="n">3</span> * period / (sr * decay))         <span class="c"># loop gain: -60 dB after `decay` s</span>
+    n = <span class="f">int</span>(seconds * sr)
+    y = np.<span class="f">zeros</span>(n + <span class="n">1</span>)                            <span class="c"># y[i + 1] is sample i; y[0] = 0</span>
+    noise = np.random.<span class="f">default_rng</span>(M).<span class="f">uniform</span>(-<span class="n">1</span>, <span class="n">1</span>, M)
+    noise -= noise.<span class="f">mean</span>()                          <span class="c"># no DC offset: no thump</span>
+    y[<span class="n">1</span>:M + <span class="n">1</span>] = np.<span class="f">convolve</span>(noise, [<span class="n">0.5</span>, <span class="n">0.5</span>], <span class="s">"same"</span>)   <span class="c"># a softer pluck</span>
+    <span class="k">for</span> s <span class="k">in</span> <span class="f">range</span>(M, n, M):                       <span class="c"># a period at a time, vectorized</span>
+        e = <span class="f">min</span>(s + M, n)
+        y[s + <span class="n">1</span>:e + <span class="n">1</span>] = g * ((<span class="n">1</span> - w) * y[s - M + <span class="n">1</span>:e - M + <span class="n">1</span>] + w * y[s - M:e - M])
+    <span class="k">return</span> <span class="n">0.4</span> * y[<span class="n">1</span>:]
 
+kb = <span class="f">keyboard</span>(karplus_strong, sr, release=<span class="n">0.5</span>, input=<span class="s">"genie"</span>)</code></pre>
+    <div class="cell-out" data-out="synth-strings" hidden></div>
+  </div>
   <p class="callout">
     Genie mode is <a href="https://magenta.tensorflow.org/pianogenie"><b>Piano Genie</b></a> —
     Chris Donahue, Ian Simon &amp; Sander Dieleman, <i>Piano Genie</i>, IUI 2019
@@ -107,10 +125,58 @@ kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span>*cycle,
     if you use genie mode in your work.
   </p>
 
-  <div class="step-h"><span class="n">04</span><h2>Replay your performance</h2></div>
+  <div class="step-h"><span class="n">04</span><h2>A drum machine on eight pads</h2></div>
   <p>
-    Play something above first. <code>kb.render()</code> re-synthesises exactly what you
-    played, offline, as a NumPy array you can analyse, edit, or play back.
+    Every drum synthesized from scratch in NumPy — pitch sweeps for the kick and toms,
+    filtered noise for the hats, three quick noise bursts for the clap — and laid out on
+    <code>A S D F J K L ;</code> with a <code>KeyMap</code>. <code>one_shot=True</code> lets each
+    hit ring out however briefly you tap. Try the <b>Genie</b> switch here too: the genie
+    drums, using only these eight sounds.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-drums">▶ Run</button></div>
+<pre class="cell-code"><code><span class="k">from</span> browseraudio <span class="k">import</span> KeyMap
+
+n = np.<span class="f">arange</span>(sr) / sr                             <span class="c"># 1 s per hit</span>
+noise = np.random.<span class="f">default_rng</span>(<span class="n">0</span>).<span class="f">uniform</span>(-<span class="n">1</span>, <span class="n">1</span>, sr)
+
+<span class="k">def</span> <span class="f">sweep</span>(f0, f1, rate):                           <span class="c"># a pitch falling from f0 to f1</span>
+    f = f1 + (f0 - f1) * np.<span class="f">exp</span>(-rate * n)
+    <span class="k">return</span> np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * np.<span class="f">cumsum</span>(f) / sr)
+
+hiss = np.<span class="f">diff</span>(noise, prepend=<span class="n">0</span>)                   <span class="c"># noise with the lows taken out</span>
+DRUMS = {                                          <span class="c"># General MIDI drum numbers</span>
+    <span class="n">36</span>: <span class="f">sweep</span>(<span class="n">160</span>, <span class="n">50</span>, <span class="n">30</span>) * np.<span class="f">exp</span>(-<span class="n">7</span> * n),                       <span class="c"># kick</span>
+    <span class="n">38</span>: <span class="n">0.5</span> * noise * np.<span class="f">exp</span>(-<span class="n">18</span> * n)
+        + <span class="n">0.5</span> * <span class="f">sweep</span>(<span class="n">240</span>, <span class="n">180</span>, <span class="n">20</span>) * np.<span class="f">exp</span>(-<span class="n">25</span> * n),                            <span class="c"># snare</span>
+    <span class="n">42</span>: <span class="n">0.35</span> * hiss * np.<span class="f">exp</span>(-<span class="n">60</span> * n),                             <span class="c"># closed hi-hat</span>
+    <span class="n">46</span>: <span class="n">0.3</span> * hiss * np.<span class="f">exp</span>(-<span class="n">9</span> * n),                               <span class="c"># open hi-hat</span>
+    <span class="n">39</span>: <span class="n">0.5</span> * noise * <span class="f">sum</span>(np.<span class="f">exp</span>(-<span class="n">80</span> * np.<span class="f">clip</span>(n - d, <span class="n">0</span>, <span class="k">None</span>)) * (n &gt;= d)
+                          <span class="k">for</span> d <span class="k">in</span> (<span class="n">0</span>, <span class="n">0.012</span>, <span class="n">0.024</span>)),             <span class="c"># clap</span>
+    <span class="n">45</span>: <span class="f">sweep</span>(<span class="n">180</span>, <span class="n">110</span>, <span class="n">12</span>) * np.<span class="f">exp</span>(-<span class="n">9</span> * n),                      <span class="c"># low tom</span>
+    <span class="n">48</span>: <span class="f">sweep</span>(<span class="n">260</span>, <span class="n">170</span>, <span class="n">12</span>) * np.<span class="f">exp</span>(-<span class="n">10</span> * n),                     <span class="c"># high tom</span>
+    <span class="n">56</span>: <span class="n">0.25</span> * np.<span class="f">sign</span>(np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * <span class="n">540</span> * n) + np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * <span class="n">800</span> * n))
+        * np.<span class="f">exp</span>(-<span class="n">12</span> * n),                                         <span class="c"># cowbell</span>
+}
+
+DRUMS = {midi: <span class="n">0.8</span> * hit / np.<span class="f">abs</span>(hit).<span class="f">max</span>()      <span class="c"># even levels</span>
+         <span class="k">for</span> midi, hit <span class="k">in</span> DRUMS.<span class="f">items</span>()}
+
+<span class="k">def</span> <span class="f">drum</span>(freq):
+    <span class="k">return</span> DRUMS[<span class="f">round</span>(<span class="n">69</span> + <span class="n">12</span> * np.<span class="f">log2</span>(freq / <span class="n">440</span>))]   <span class="c"># frequency → MIDI number</span>
+
+pads = <span class="f">KeyMap</span>([<span class="s">"KeyA"</span>, <span class="s">"KeyS"</span>, <span class="s">"KeyD"</span>, <span class="s">"KeyF"</span>, <span class="s">"KeyJ"</span>, <span class="s">"KeyK"</span>, <span class="s">"KeyL"</span>, <span class="s">"Semicolon"</span>],
+              [[(midi, <span class="n">0</span>) <span class="k">for</span> midi <span class="k">in</span> DRUMS]],
+              labels=[<span class="s">"kick"</span>, <span class="s">"snare"</span>, <span class="s">"hat"</span>, <span class="s">"open hat"</span>,
+                      <span class="s">"clap"</span>, <span class="s">"low tom"</span>, <span class="s">"hi tom"</span>, <span class="s">"bell"</span>])
+kb = <span class="f">keyboard</span>(drum, sr, keymap=pads, one_shot=<span class="k">True</span>, max_voices=<span class="n">32</span>)</code></pre>
+    <div class="cell-out" data-out="synth-drums" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">05</span><h2>Replay your performance</h2></div>
+  <p>
+    Play something above first. <code>kb.render()</code> re-synthesises exactly what you played
+    on the last keyboard, offline, as a NumPy array you can analyse, edit, or play back.
   </p>
   <div class="cell">
     <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-render">▶ Run</button></div>

@@ -45,13 +45,13 @@ class Stream(anywidget.AnyWidget):
     away, so a change of control (e.g. ``synth.pitch``) is heard from the
     next block Python renders::
 
-        synth = Sinusoid()   # its callback leaves the block silent while pitch is None
+        synth = Sinusoid()   # its callback glides to silence while `on` is False
 
         def on_note(midi, on):
             if on:
-                synth.pitch = midi
+                synth.pitch, synth.on = midi, True
             elif midi == synth.pitch:   # the sounding key was released
-                synth.pitch = None
+                synth.on = False
 
         stream(synth.callback, sample_rate=44100, block_size=512, on_note=on_note)
 
