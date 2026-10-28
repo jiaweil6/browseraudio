@@ -378,6 +378,7 @@ function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, sec
   progress.row.style.flex = "1";
   let ctx = null;
   let source = null;
+  let gain = null; // per-playback gain: short fades instead of clicks
   let t0 = 0;
   let duration = 0;
   let raf = 0;
@@ -393,8 +394,12 @@ function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, sec
     source = null;
     cancelAnimationFrame(raf);
     if (was) {
+      // Fade out over a few ms, then stop.
+      const now = ctx.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setTargetAtTime(0, now, 0.006);
       try {
-        was.stop();
+        was.stop(now + 0.05);
       } catch (e) {
         /* already ended */
       }
@@ -412,9 +417,12 @@ function uiPlayback(parent, { makeBuffer, onChange, onBlocked, buttonParent, sec
     if (!buffer) return false;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
-    src.connect(ctx.destination);
-    duration = buffer.duration;
+    gain = ctx.createGain();
     t0 = ctx.currentTime;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(1, t0 + 0.005); // 5 ms fade-in
+    src.connect(gain).connect(ctx.destination);
+    duration = buffer.duration;
     src.onended = () => {
       if (source === src) stop();
     };

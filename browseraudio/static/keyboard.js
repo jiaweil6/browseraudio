@@ -13,7 +13,7 @@
 // _keyboard.py.
 
 const FLUSH_MS = 250; // how often played notes are batched back to Python
-const STEAL_RELEASE = 0.01; // fade for a voice stolen past max_voices
+const STEAL_RELEASE = 0.03; // fade for a voice stolen past max_voices
 
 // Linear ADSR level while a key is held, t seconds after note-on.
 function heldGain(t, a, d, s) {
@@ -66,13 +66,17 @@ function render({ model, el }) {
     showState();
   }
 
-  // Silence now: release every key and voice, and close the audio context.
+  // Silence now: release every key, fade the output out over ~10 ms (no
+  // click, even for notes still ringing), and close the audio context.
   function stop() {
     controls.liftAll();
-    for (const voice of active) voice.source.stop();
+    const [c, o] = [ctx, out];
     active = [];
-    if (ctx) ctx.close();
     ctx = out = null;
+    if (c) {
+      o.gain.setTargetAtTime(0, c.currentTime, 0.008);
+      setTimeout(() => c.close(), 100);
+    }
     showState();
   }
 

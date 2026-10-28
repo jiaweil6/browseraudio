@@ -25,6 +25,10 @@ _MUSICAL_TYPING: List[Tuple[str, int]] = [
 # AudioContext rate isn't known on the Python side.
 NOMINAL_SAMPLERATE = 48000
 
+# Each rendered note's last few milliseconds fade to silence, so a sound that
+# hasn't decayed by the end of its buffer ends without a click.
+TAIL_FADE = 0.005
+
 Event = Tuple[float, int, str]
 
 
@@ -274,6 +278,10 @@ class Keyboard(anywidget.AnyWidget):
                         f"render({midi_to_hz(midi):.2f}) must return a non-empty "
                         f"mono array, got shape {y.shape}"
                     )
+                y = y.copy()  # never modify the caller's array
+                n_fade = min(int(TAIL_FADE * sample_rate), y.size // 2)
+                if n_fade:
+                    y[-n_fade:] *= np.linspace(1.0, 0.0, n_fade, dtype=np.float32)
                 self._bank[midi] = y
                 notes.append([midi, start, int(y.size)])
                 chunks.append(y)
