@@ -14,8 +14,8 @@ One page per capability, so the site grows cleanly as more of the
 | `index.html` | Landing — overview and links. |
 | `record.html` | `record()` — captures the mic to a NumPy array. |
 | `play.html` | `play()` — push a NumPy buffer to the speakers (tone + stereo). |
-| `synth.html` | `keyboard()` — design a sound in NumPy, then play it live with the computer keyboard. |
-| `realtime.html` | `stream()` and `sounddevice.OutputStream` — a block callback run live: state between blocks, block size vs. latency, a wavetable synth, and a widget-controlled de-zippered fader. |
+| `synth.html` | `keyboard()` — design a sound in NumPy, then play it live with the computer keyboard (or in genie mode, via Piano Genie). |
+| `realtime.html` | `stream()` and `sounddevice.OutputStream` — a block callback run live: state between blocks, block size vs. latency, a wavetable synth, genie mode on a stream, and a widget-controlled de-zippered fader. |
 | `how-it-works.html` | The architecture: the anywidget bridge, the `sounddevice` facade, the real notebook stack (JupyterLite / Pyodide), and how the demo runs the real kernel. |
 
 The interactive pages (`record.html`, `play.html`, `synth.html`, `realtime.html`) boot a **real**

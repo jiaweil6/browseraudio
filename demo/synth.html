@@ -85,7 +85,29 @@ kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span>*cycle,
     <div class="cell-out" data-out="synth-wavetable" hidden></div>
   </div>
 
-  <div class="step-h"><span class="n">03</span><h2>Replay your performance</h2></div>
+  <div class="step-h"><span class="n">03</span><h2>Genie mode: 8 buttons, a whole piano</h2></div>
+  <p>
+    Switch to <b>Genie</b> (or pass <code>input="genie"</code>) and play with just eight
+    buttons — <code>1</code>–<code>8</code>, or <code>A S D F J K L ;</code>. Press them in
+    any rhythm and contour: lower buttons for lower notes, higher for higher. A neural
+    network turns your button presses into a melody, here kept to the notes this
+    keyboard has rendered.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-genie">▶ Run</button></div>
+<pre class="cell-code"><code>kb = <span class="f">keyboard</span>(pluck, sr, input=<span class="s">"genie"</span>)</code></pre>
+    <div class="cell-out" data-out="synth-genie" hidden></div>
+  </div>
+
+  <p class="callout">
+    Genie mode is <a href="https://magenta.tensorflow.org/pianogenie"><b>Piano Genie</b></a> —
+    Chris Donahue, Ian Simon &amp; Sander Dieleman, <i>Piano Genie</i>, IUI 2019
+    (<a href="https://arxiv.org/abs/1810.03226">arXiv:1810.03226</a>) — running the trained
+    model published by <a href="https://magenta.tensorflow.org/">Magenta</a>. Please cite it
+    if you use genie mode in your work.
+  </p>
+
+  <div class="step-h"><span class="n">04</span><h2>Replay your performance</h2></div>
   <p>
     Play something above first. <code>kb.render()</code> re-synthesises exactly what you
     played, offline, as a NumPy array you can analyse, edit, or play back.

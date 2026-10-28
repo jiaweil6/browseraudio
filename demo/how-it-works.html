@@ -159,7 +159,9 @@
       <code>record()</code> mounts the real <code>Recorder</code> anywidget,
       <code>play()</code> the real <code>Player</code>, <code>keyboard()</code> the real
       <code>Keyboard</code>, and <code>stream()</code> the real <code>Stream</code> — exactly
-      what you'd get in a notebook.
+      what you'd get in a notebook. Genie mode runs
+      <a href="https://magenta.tensorflow.org/pianogenie">Piano Genie</a> (Donahue, Simon &amp;
+      Dieleman, IUI 2019) — Magenta's trained model, executed in plain JavaScript in the page.
     </p>
     <pre class="code"><span class="c">// assets/live.js — on first Run</span>
 <span class="k">await</span> loadScript(<span class="s">"vendor/thebe-dist/lite/thebe-lite.min.js"</span>);   <span class="c">// + Pyodide</span>
