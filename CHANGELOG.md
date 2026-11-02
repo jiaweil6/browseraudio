@@ -6,6 +6,8 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-11-02
+
 ### Changed
 - `stream()` shows its key surface only when `on_note` is given (or `keyboard=True`).
 
@@ -102,7 +104,8 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jiaweil6/browseraudio/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jiaweil6/browseraudio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jiaweil6/browseraudio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...v0.2.0
