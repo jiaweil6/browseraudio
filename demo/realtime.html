@@ -6,17 +6,19 @@
 <title>Real-time · browseraudio</title>
 <link rel="stylesheet" href="assets/style.css" />
 <link rel="stylesheet" href="assets/live.css" />
+<script src="assets/nav.js"></script>
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner wrap">
     <a class="brand" href="index.html">browseraudio</a>
-    <div class="nav-links">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links"><span>Menu</span></button>
+    <div class="nav-links" id="nav-links">
       <a href="record.html">Record</a>
       <a href="play.html">Play</a>
       <a href="synth.html">Synth</a>
-      <a href="realtime.html" class="active">Real-time</a>
+      <a href="realtime.html" class="active" aria-current="page">Real-time</a>
       <a href="how-it-works.html">How it works</a>
       <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
     </div>
@@ -38,19 +40,19 @@
   </p>
 
   <div class="runbar">
-    <button class="run-all" id="run-all">▶ Run all</button>
+    <button class="run-all" id="run-all">Run all</button>
     <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
   </div>
 
   <div class="step-h"><span class="n">01</span><h2>A callback with state</h2></div>
   <p>
     The pitch is read once per block; phase and amplitude carry over between blocks,
-    and the amplitude glides (de-zippering) so notes don't click. Run, press <b>▶ Start</b>,
+    and the amplitude glides (de-zippering) so notes don't click. Run, press <b>Start</b>,
     click the keyboard and hold keys: <code>A S D F …</code> white, <code>W E T …</code>
     black, <code>Z</code>/<code>X</code> octave. One voice: a new key takes over.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-sine">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-sine">Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
 <span class="k">from</span> browseraudio <span class="k">import</span> stream
 
@@ -91,11 +93,11 @@ s = <span class="f">stream</span>(synth.callback, sample_rate=SR, block_size=<sp
   <div class="step-h"><span class="n">02</span><h2>Block size: time budget vs. latency</h2></div>
   <p>
     Small blocks cost more callback calls (<code>B = 1</code>: watch <b>% of budget</b>);
-    big ones delay your keys (<code>B = 16384</code>). Run, then press <b>▶ Start</b> again.
+    big ones delay your keys (<code>B = 16384</code>). Run, then press <b>Start</b> again.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-blocksize">▶ Run</button></div>
-<pre class="cell-code"><code>s.block_size = <span class="n">16384</span>     <span class="c"># try 1, 64, 512, 16384 — then ▶ Start</span></code></pre>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-blocksize">Run</button></div>
+<pre class="cell-code"><code>s.block_size = <span class="n">16384</span>     <span class="c"># try 1, 64, 512, 16384 — then Start</span></code></pre>
     <div class="cell-out" data-out="rt-blocksize" hidden></div>
   </div>
 
@@ -105,7 +107,7 @@ s = <span class="f">stream</span>(synth.callback, sample_rate=SR, block_size=<sp
     and soft-clips. Hold a chord.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-poly">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-poly">Run</button></div>
 <pre class="cell-code"><code>s.<span class="f">stop</span>()                                     <span class="c"># stop the stream above</span>
 
 M = <span class="n">2048</span>                                     <span class="c"># one cycle of a soft, organ-like wave</span>
@@ -166,7 +168,7 @@ s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<spa
     <code>A S D F J K L ;</code>): a neural network picks the piano keys.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-genie">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-genie">Run</button></div>
 <pre class="cell-code"><code>s.<span class="f">stop</span>()
 poly = <span class="f">Poly</span>()
 s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<span class="n">512</span>, on_note=poly.on_note,
@@ -187,7 +189,7 @@ s = <span class="f">stream</span>(poly.callback, sample_rate=SR, block_size=<spa
     <b>index</b> for brightness, <b>ratio</b> for character.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-fm">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-fm">Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> ipywidgets <span class="k">as</span> widgets
 
 ratio = widgets.<span class="f">FloatSlider</span>(value=<span class="n">2</span>, min=<span class="n">0.5</span>, max=<span class="n">7</span>, step=<span class="n">0.5</span>, description=<span class="s">"ratio"</span>)
@@ -221,7 +223,7 @@ widgets.<span class="f">VBox</span>([ratio, index])</code></pre>
     volume fader.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-outputstream">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-outputstream">Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> ipywidgets <span class="k">as</span> widgets
 <span class="k">import</span> browseraudio.sounddevice <span class="k">as</span> sd
 
@@ -251,10 +253,10 @@ level</code></pre>
   <p>
     A loop of <code>(beat, kwargs)</code> events, pyquist-style: each block, the callback
     starts the events whose beat it reaches and mixes the sounding notes. Run, press
-    <b>▶ Start</b>.
+    <b>Start</b>.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live">Run</button></div>
 <pre class="cell-code"><code>out.<span class="f">stop</span>()
 
 <span class="k">def</span> <span class="f">note</span>(pitch, length=<span class="n">0.5</span>):
@@ -304,7 +306,7 @@ live = <span class="f">LiveScore</span>(score, instrument)</code></pre>
     your changes.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live-edit">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live-edit">Run</button></div>
 <pre class="cell-code"><code>score[:] = [(<span class="n">0</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}), (<span class="n">1.5</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}), (<span class="n">2</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}),
             (<span class="n">0</span>, {<span class="s">"pitch"</span>: <span class="n">60</span>}), (<span class="n">0.5</span>, {<span class="s">"pitch"</span>: <span class="n">67</span>}), (<span class="n">1</span>, {<span class="s">"pitch"</span>: <span class="n">63</span>}),
             (<span class="n">1.5</span>, {<span class="s">"pitch"</span>: <span class="n">70</span>}), (<span class="n">2</span>, {<span class="s">"pitch"</span>: <span class="n">72</span>}), (<span class="n">2.5</span>, {<span class="s">"pitch"</span>: <span class="n">70</span>}),

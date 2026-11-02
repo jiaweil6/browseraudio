@@ -6,18 +6,20 @@
 <title>How it works · browseraudio</title>
 <meta name="description" content="The architecture behind browseraudio: anywidget, the main-thread/worker bridge, the sounddevice facade, the JupyterLite / Pyodide notebook stack, and how the demo runs the real thebe + Pyodide kernel in the browser." />
 <link rel="stylesheet" href="assets/style.css" />
+<script src="assets/nav.js"></script>
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner wrap">
     <a class="brand" href="index.html">browseraudio</a>
-    <div class="nav-links">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links"><span>Menu</span></button>
+    <div class="nav-links" id="nav-links">
       <a href="record.html">Record</a>
       <a href="play.html">Play</a>
       <a href="synth.html">Synth</a>
       <a href="realtime.html">Real-time</a>
-      <a href="how-it-works.html" class="active">How it works</a>
+      <a href="how-it-works.html" class="active" aria-current="page">How it works</a>
       <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
     </div>
   </div>

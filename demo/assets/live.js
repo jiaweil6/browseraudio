@@ -147,7 +147,7 @@
       e.preventDefault();
       e.returnValue = "";
     });
-    setStatus("● Python connected — reload page to reset", false);
+    setStatus("Python connected · reload to reset", false);
   }
 
   // Prefer the wheel built from this deploy (wheels/manifest.json); else PyPI.
@@ -222,7 +222,7 @@
     setStatus(kernelPromise ? "running…" : "starting Python…", true);
     queue = queue
       .then(function () { return runUpTo(targetCell); })
-      .then(function () { setStatus("● ready", false); })
+      .then(function () { setStatus("ready", false); })
       .catch(function (err) {
         console.error("[live] run", err);
         setStatus("error: " + (err && err.message ? err.message : err), false);

@@ -47,5 +47,5 @@
 }
 /* Tracebacks / stderr stand out without shouting. */
 .cell-out .jp-OutputArea [data-mime-type="application/vnd.jupyter.stderr"] {
-  color: #b4452f; white-space: pre-wrap;
+  color: var(--danger); white-space: pre-wrap;
 }
