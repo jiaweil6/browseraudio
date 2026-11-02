@@ -6,14 +6,16 @@
 <title>Record · browseraudio</title>
 <link rel="stylesheet" href="assets/style.css" />
 <link rel="stylesheet" href="assets/live.css" />
+<script src="assets/nav.js"></script>
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner wrap">
     <a class="brand" href="index.html">browseraudio</a>
-    <div class="nav-links">
-      <a href="record.html" class="active">Record</a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links"><span>Menu</span></button>
+    <div class="nav-links" id="nav-links">
+      <a href="record.html" class="active" aria-current="page">Record</a>
       <a href="play.html">Play</a>
       <a href="synth.html">Synth</a>
       <a href="realtime.html">Real-time</a>
@@ -38,20 +40,20 @@
   </p>
 
   <div class="runbar">
-    <button class="run-all" id="run-all">▶ Run all</button>
+    <button class="run-all" id="run-all">Run all</button>
     <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
   </div>
 
   <div class="step-h"><span class="n">01</span><h2>Record three seconds</h2></div>
   <p>
-    Click <b>● Record</b> and allow the mic; <b>Stop</b> early keeps the take. Hum one
+    Click <b>Record</b> and allow the mic; <b>Stop</b> early keeps the take. Hum one
     steady note: cell 03 turns it into an instrument.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="record">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="record">Run</button></div>
 <pre class="cell-code"><code><span class="k">from</span> browseraudio <span class="k">import</span> record
 
-rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c"># shows a ● Record button — click it</span></code></pre>
+rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c"># shows a Record button — click it</span></code></pre>
     <div class="cell-out" data-out="record" hidden></div>
   </div>
 
@@ -61,7 +63,7 @@ rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c
     recorder (<a href="how-it-works.html#two-cells">why</a>).
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="inspect">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="inspect">Run</button></div>
 <pre class="cell-code"><code>rec.samples.shape, rec.sample_rate</code></pre>
     <div class="cell-out" data-out="inspect" hidden></div>
   </div>
@@ -72,7 +74,7 @@ rec = <span class="f">record</span>(<span class="n">3.0</span>)   <span class="c
     yourself, or switch to <b>Genie</b>.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="voice">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="voice">Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
 <span class="k">from</span> browseraudio <span class="k">import</span> keyboard
 

@@ -6,16 +6,18 @@
 <title>Synth · browseraudio</title>
 <link rel="stylesheet" href="assets/style.css" />
 <link rel="stylesheet" href="assets/live.css" />
+<script src="assets/nav.js"></script>
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner wrap">
     <a class="brand" href="index.html">browseraudio</a>
-    <div class="nav-links">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links"><span>Menu</span></button>
+    <div class="nav-links" id="nav-links">
       <a href="record.html">Record</a>
       <a href="play.html">Play</a>
-      <a href="synth.html" class="active">Synth</a>
+      <a href="synth.html" class="active" aria-current="page">Synth</a>
       <a href="realtime.html">Real-time</a>
       <a href="how-it-works.html">How it works</a>
       <a class="ext" href="https://github.com/jiaweil6/browseraudio">GitHub</a>
@@ -38,7 +40,7 @@
   </p>
 
   <div class="runbar">
-    <button class="run-all" id="run-all">▶ Run all</button>
+    <button class="run-all" id="run-all">Run all</button>
     <span class="status"><span class="dot" id="kdot"></span><span id="kstat">ready</span></span>
   </div>
 
@@ -49,7 +51,7 @@
     (<code>Z</code>/<code>X</code> change octave).
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-pluck">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-pluck">Run</button></div>
 <pre class="cell-code"><code><span class="k">import</span> numpy <span class="k">as</span> np
 <span class="k">from</span> browseraudio <span class="k">import</span> keyboard, play
 
@@ -71,7 +73,7 @@ kb = <span class="f">keyboard</span>(pluck, sr, release=<span class="n">0.3</spa
     One cycle, looped at any pitch and shaped by an ADSR envelope.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-wavetable">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-wavetable">Run</button></div>
 <pre class="cell-code"><code>cycle = np.<span class="f">linspace</span>(-<span class="n">1</span>, <span class="n">1</span>, <span class="n">256</span>)                    <span class="c"># one sawtooth cycle</span>
 kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span> * cycle,
               attack=<span class="n">0.02</span>, decay=<span class="n">0.2</span>, sustain=<span class="n">0.6</span>, release=<span class="n">0.4</span>)</code></pre>
@@ -85,7 +87,7 @@ kb = <span class="f">keyboard</span>(wavetable=<span class="n">0.5</span> * cycl
     <code>A S D F J K L ;</code>.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-strings">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-strings">Run</button></div>
 <pre class="cell-code"><code><span class="k">def</span> <span class="f">karplus_strong</span>(freq, seconds=<span class="n">1.4</span>, decay=<span class="n">1.0</span>):
     <span class="s">"""A plucked string: a burst of noise circulating in a short, lossy delay line."""</span>
     period = sr / freq                             <span class="c"># the loop must be one period long:</span>
@@ -119,7 +121,7 @@ kb = <span class="f">keyboard</span>(karplus_strong, sr, release=<span class="n"
     <b>Genie</b> here too.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-drums">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-drums">Run</button></div>
 <pre class="cell-code"><code><span class="k">from</span> browseraudio <span class="k">import</span> KeyMap
 
 n = np.<span class="f">arange</span>(sr) / sr                             <span class="c"># 1 s per hit</span>
@@ -163,7 +165,7 @@ kb = <span class="f">keyboard</span>(drum, sr, keymap=pads, one_shot=<span class
     <code>kb.render()</code> re-synthesises what you played on the last keyboard.
   </p>
   <div class="cell">
-    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-render">▶ Run</button></div>
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="synth-render">Run</button></div>
 <pre class="cell-code"><code><span class="f">print</span>(<span class="f">len</span>(kb.events), <span class="s">"note events"</span>)
 <span class="f">play</span>(kb.<span class="f">render</span>(), kb.sample_rate)</code></pre>
     <div class="cell-out" data-out="synth-render" hidden></div>
