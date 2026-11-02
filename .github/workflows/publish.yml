@@ -1,14 +1,17 @@
 name: publish
 
-# Push a v* tag to publish to PyPI. Uses the PYPI_API_TOKEN secret if set,
-# else trusted publishing.
+# Publish to PyPI: push a v* tag, or run this workflow on main (it tags v<version>).
+# Uses the PYPI_API_TOKEN secret if set, else trusted publishing.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,10 +22,17 @@ jobs:
           pip install build twine
           python -m build
           twine check dist/*
-      - name: Tag matches version
+      - id: version
+        name: Check ref
         run: |
           v=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          test "${GITHUB_REF_NAME}" = "v$v" || { echo "tag ${GITHUB_REF_NAME} != v$v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "v$v" || { echo "tag $GITHUB_REF_NAME != v$v"; exit 1; }
+          else
+            test "$GITHUB_REF_NAME" = main || { echo "run on main"; exit 1; }
+            ! git ls-remote --exit-code --tags origin "v$v" || { echo "v$v already tagged"; exit 1; }
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -42,3 +52,15 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git tag "v${{ needs.build.outputs.version }}"
+          git push origin "v${{ needs.build.outputs.version }}"
