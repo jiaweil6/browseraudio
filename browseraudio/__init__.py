@@ -9,4 +9,4 @@ __all__ = [
     "Recorder", "record", "Player", "play", "Keyboard", "KeyMap", "keyboard",
     "Stream", "Block", "stream",
 ]
-__version__ = "0.3.0"
+__version__ = "0.4.0"

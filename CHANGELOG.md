@@ -6,6 +6,8 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-02
+
 ### Added
 - `stream()` / `Stream`: real-time synthesis; the browser pulls blocks from a
   `callback(block)`, with live latency and load stats.
@@ -97,7 +99,8 @@ First public release.
   are slated to change (see the roadmap in the README).
 - A single-cell `await record()` is not supported; use the two-cell flow.
 
-[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jiaweil6/browseraudio/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jiaweil6/browseraudio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jiaweil6/browseraudio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiaweil6/browseraudio/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jiaweil6/browseraudio/compare/v0.1.1...v0.1.2
