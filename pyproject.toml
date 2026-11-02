@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browseraudio"
-version = "0.3.0"
-description = "Microphone capture and playback for in-browser Python (Pyodide / JupyterLite) via the Web Audio API."
+version = "0.4.0"
+description = "Audio I/O and real-time synthesis for in-browser Python (Pyodide / JupyterLite / thebe) via the Web Audio API."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "jiaweil6" }]
-keywords = ["pyodide", "jupyterlite", "web audio", "microphone", "anywidget", "wasm"]
+keywords = ["pyodide", "jupyterlite", "thebe", "web audio", "microphone", "synthesizer", "real-time", "anywidget", "wasm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
