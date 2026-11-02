@@ -247,6 +247,72 @@ level</code></pre>
     Blocks are only made while no cell runs: a busy kernel is heard as dropouts.
   </p>
 
+  <div class="step-h"><span class="n">07</span><h2>A live score</h2></div>
+  <p>
+    A loop of <code>(beat, kwargs)</code> events, pyquist-style: each block, the callback
+    starts the events whose beat it reaches and mixes the sounding notes. Run, press
+    <b>▶ Start</b>.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live">▶ Run</button></div>
+<pre class="cell-code"><code>out.<span class="f">stop</span>()
+
+<span class="k">def</span> <span class="f">note</span>(pitch, length=<span class="n">0.5</span>):
+    t = np.<span class="f">arange</span>(<span class="f">int</span>(length * SR)) / SR
+    f = <span class="n">440</span> * <span class="n">2</span> ** ((pitch - <span class="n">69</span>) / <span class="n">12</span>)
+    <span class="k">return</span> <span class="n">0.2</span> * np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * f * t) * np.<span class="f">exp</span>(-<span class="n">8</span> * t) * np.<span class="f">minimum</span>(<span class="n">1</span>, t * <span class="n">400</span>)
+
+<span class="k">def</span> <span class="f">kick</span>(length=<span class="n">0.4</span>):
+    t = np.<span class="f">arange</span>(<span class="f">int</span>(length * SR)) / SR
+    <span class="k">return</span> <span class="n">0.5</span> * np.<span class="f">sin</span>(<span class="n">2</span> * np.pi * (<span class="n">50</span> * t + <span class="n">60</span> * (<span class="n">1</span> - np.<span class="f">exp</span>(-<span class="n">30</span> * t)))) * np.<span class="f">exp</span>(-<span class="n">12</span> * t)
+
+<span class="k">def</span> <span class="f">instrument</span>(pitch=<span class="k">None</span>, drum=<span class="k">False</span>):        <span class="c"># event kwargs -&gt; samples</span>
+    <span class="k">return</span> <span class="f">kick</span>() <span class="k">if</span> drum <span class="k">else</span> <span class="f">note</span>(pitch)
+
+<span class="k">class</span> <span class="f">LiveScore</span>:
+    <span class="s">"""Loops a score of (beat, kwargs) events. Edit it while it plays."""</span>
+    <span class="k">def</span> <span class="f">__init__</span>(self, score, instrument, beats=<span class="n">4</span>, bpm=<span class="n">120</span>):
+        self.score, self.instrument, self.beats, self.bpm = score, instrument, beats, bpm
+        self.beat, self.voices = <span class="n">0.0</span>, []       <span class="c"># playhead (beats); [samples, read index]</span>
+        self.stream = <span class="f">stream</span>(self.callback, sample_rate=SR, block_size=<span class="n">512</span>)
+
+    <span class="k">def</span> <span class="f">callback</span>(self, block):
+        B = <span class="f">len</span>(block)
+        span = B / SR * self.bpm / <span class="n">60</span>           <span class="c"># beats in this block</span>
+        <span class="k">for</span> beat, kwargs <span class="k">in</span> self.score:
+            ahead = (beat - self.beat) % self.beats
+            <span class="k">if</span> ahead &lt; span:                    <span class="c"># starts in this block</span>
+                self.voices.<span class="f">append</span>([self.<span class="f">instrument</span>(**kwargs), -<span class="f">int</span>(ahead / span * B)])
+        <span class="k">for</span> v <span class="k">in</span> self.voices:                   <span class="c"># mix every sounding note</span>
+            x, i = v
+            a = <span class="f">max</span>(<span class="n">0</span>, -i)
+            seg = x[<span class="f">max</span>(i, <span class="n">0</span>):<span class="f">max</span>(i, <span class="n">0</span>) + B - a]
+            block[a:a + <span class="f">len</span>(seg), <span class="n">0</span>] += seg
+            v[<span class="n">1</span>] += B
+        self.voices = [v <span class="k">for</span> v <span class="k">in</span> self.voices <span class="k">if</span> v[<span class="n">1</span>] &lt; <span class="f">len</span>(v[<span class="n">0</span>])]
+        self.beat = (self.beat + span) % self.beats
+
+score = [(<span class="n">0</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}), (<span class="n">2</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}),
+         (<span class="n">0</span>, {<span class="s">"pitch"</span>: <span class="n">60</span>}), (<span class="n">1</span>, {<span class="s">"pitch"</span>: <span class="n">63</span>}), (<span class="n">2</span>, {<span class="s">"pitch"</span>: <span class="n">67</span>}), (<span class="n">3</span>, {<span class="s">"pitch"</span>: <span class="n">70</span>})]
+live = <span class="f">LiveScore</span>(score, instrument)</code></pre>
+    <div class="cell-out" data-out="rt-live" hidden></div>
+  </div>
+
+  <div class="step-h"><span class="n">08</span><h2>Edit it while it plays</h2></div>
+  <p>
+    Change the pattern or tempo and run this cell again: the loop keeps going, with
+    your changes.
+  </p>
+  <div class="cell">
+    <div class="cell-head"><span class="lang">python</span><button class="run" data-run="rt-live-edit">▶ Run</button></div>
+<pre class="cell-code"><code>score[:] = [(<span class="n">0</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}), (<span class="n">1.5</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}), (<span class="n">2</span>, {<span class="s">"drum"</span>: <span class="k">True</span>}),
+            (<span class="n">0</span>, {<span class="s">"pitch"</span>: <span class="n">60</span>}), (<span class="n">0.5</span>, {<span class="s">"pitch"</span>: <span class="n">67</span>}), (<span class="n">1</span>, {<span class="s">"pitch"</span>: <span class="n">63</span>}),
+            (<span class="n">1.5</span>, {<span class="s">"pitch"</span>: <span class="n">70</span>}), (<span class="n">2</span>, {<span class="s">"pitch"</span>: <span class="n">72</span>}), (<span class="n">2.5</span>, {<span class="s">"pitch"</span>: <span class="n">70</span>}),
+            (<span class="n">3</span>, {<span class="s">"pitch"</span>: <span class="n">67</span>}), (<span class="n">3.5</span>, {<span class="s">"pitch"</span>: <span class="n">63</span>})]
+live.bpm = <span class="n">132</span></code></pre>
+    <div class="cell-out" data-out="rt-live-edit" hidden></div>
+  </div>
+
   <hr class="rule" />
   <p>Prefer zero round trips? <a href="synth.html">Design a sound up front and play it in the page <span class="arr">→</span></a></p>
 </main>
