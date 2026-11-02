@@ -192,6 +192,13 @@ def test_notes_reach_on_note_and_steer_the_next_block():
     assert peak_hz == pytest.approx(880, abs=2)
 
 
+def test_keys_show_only_with_on_note():
+    cb = lambda b: None
+    assert Stream(cb).keyboard is False
+    assert Stream(cb, on_note=lambda m, on: None).keyboard is True
+    assert Stream(cb, keyboard=True).keyboard is True
+
+
 def test_notes_without_on_note_are_ignored():
     s = Stream(lambda block: None, SR, 4)
     _msg(s, type="note", midi=60, on=1)
