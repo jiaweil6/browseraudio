@@ -6,6 +6,9 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `stream()` shows its key surface only when `on_note` is given (or `keyboard=True`).
+
 ## [0.4.0] — 2026-11-02
 
 ### Added

@@ -42,7 +42,7 @@ class Stream(anywidget.AnyWidget):
         sample_rate, block_size, channels: The stream's format.
         lookahead: Seconds queued in the browser (whole blocks, at least two).
         playing: Synced with the Start/Stop button; see :meth:`start` / :meth:`stop`.
-        keyboard: Show the key surface.
+        keyboard: Show the key surface (default: only with ``on_note``).
         input: ``"keys"`` or ``"genie"``.
         genie_temperature, genie_range, genie_checkpoint: Genie-mode settings.
         error: Last callback error (stops the stream), else ``""``.
@@ -80,6 +80,7 @@ class Stream(anywidget.AnyWidget):
         genie_checkpoint: str = GENIE_CHECKPOINT,
         **kwargs,
     ):
+        kwargs.setdefault("keyboard", on_note is not None)
         if not callable(callback):
             raise TypeError("callback must be callable, as callback(block)")
         # What every browser's AudioContext accepts.
