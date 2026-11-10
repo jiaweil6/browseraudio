@@ -176,11 +176,13 @@ def test_output_stream_stop_start_close(captured_display):
     stream = sd.OutputStream(samplerate=8000, blocksize=4, channels=1,
                              callback=lambda *a: None)
     stream.start()
+    _pull(stream)
     stream.stop()
     assert stream.stopped
     stream.start()
     assert stream.active
     assert captured_display == [stream.widget]  # displayed once
+    _pull(stream)
     stream.close()
     assert stream.closed and not stream.active
     with pytest.raises(RuntimeError):
@@ -191,7 +193,61 @@ def test_output_stream_as_context_manager(captured_display):
     with sd.OutputStream(samplerate=8000, blocksize=4, channels=1,
                          callback=lambda *a: None) as stream:
         assert stream.active
+        _pull(stream)
     assert stream.closed
+
+
+def test_output_stream_warns_when_stopped_before_any_audio(captured_display):
+    # One cell: the kernel is busy, so the browser never gets a block.
+    with pytest.warns(RuntimeWarning, match="later one"):
+        with sd.OutputStream(samplerate=8000, blocksize=4, channels=1,
+                             callback=lambda *a: None):
+            pass
+
+
+def test_output_stream_never_started_does_not_warn(captured_display, recwarn):
+    sd.OutputStream(samplerate=8000, blocksize=4, channels=1,
+                    callback=lambda *a: None).close()
+    assert not recwarn.list
+
+
+def test_output_stream_shows_the_cause_of_an_abort(captured_display):
+    # pyquist's Stream wraps callback errors as `raise CallbackAbort from err`.
+    def callback(outdata, frames, time, status):
+        try:
+            1 / 0
+        except Exception as err:
+            raise sd.CallbackAbort from err
+
+    stream = sd.OutputStream(samplerate=8000, blocksize=4, channels=1, callback=callback)
+    stream.start()
+    assert not _pull(stream).any()
+    assert not stream.active
+    assert stream.widget.error == "callback: ZeroDivisionError: division by zero"
+
+
+def test_output_stream_drives_a_pyquist_style_stream(captured_display):
+    # pyquist >= 0.3 Stream: mono output opened as 2 channels, callback passed as
+    # `lambda o, *_`, a fixed safe gain, and close() to stop.
+    out = sd.query_devices(kind="output")
+    channels = min(2, out["max_output_channels"])
+
+    def process(outdata):
+        mono = np.full((len(outdata), 1), 2.0, dtype=np.float32)
+        outdata[:] = 0.1 * np.clip(mono, -1.0, 1.0)
+
+    stream = sd.OutputStream(samplerate=44100, blocksize=4, channels=channels,
+                             dtype="float32", callback=lambda o, *_: process(o))
+    stream.start()
+    assert np.allclose(_pull(stream, n=2), 0.1)
+    stream.close()
+    assert stream.closed
+
+
+@pytest.mark.parametrize("cls", [sd.InputStream, sd.Stream])
+def test_input_streams_raise_with_guidance(cls):
+    with pytest.raises(RuntimeError, match="record"):
+        cls(samplerate=44100, blocksize=512, channels=1, callback=lambda *a: None)
 
 
 def test_output_stream_defaults_and_latency():

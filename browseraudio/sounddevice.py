@@ -2,12 +2,14 @@
 
 ``play``, ``wait``, ``OutputStream``, ``query_devices`` and ``default`` work
 as in sounddevice. ``rec`` raises: a browser kernel can't fill a buffer
-synchronously — use :func:`browseraudio.record`.
+synchronously — use :func:`browseraudio.record`. ``InputStream`` and ``Stream``
+raise too: there is no real-time input.
 """
 
 from __future__ import annotations
 
 import time as _time
+import warnings
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -22,6 +24,8 @@ __all__ = [
     "wait",
     "rec",
     "OutputStream",
+    "InputStream",
+    "Stream",
     "CallbackFlags",
     "CallbackStop",
     "CallbackAbort",
@@ -217,7 +221,7 @@ class OutputStream:
         never_drop_input: Any = None,
         prime_output_buffers_using_stream_callback: Any = None,
     ) -> None:
-        from ._stream import Stream
+        from ._stream import Stream as Engine
 
         if callback is None:
             raise ValueError(
@@ -242,12 +246,13 @@ class OutputStream:
         self.dtype = "float32"
         self.latency = lookahead
         self._closed = False
+        self._started = False
         self._displayed = False
         self._dropouts_seen = 0
         self._t0 = _time.perf_counter()
         self._frames_done = 0
 
-        self._widget = Stream(
+        self._widget = Engine(
             self._render,
             int(round(self.samplerate)),
             self.blocksize,
@@ -275,14 +280,30 @@ class OutputStream:
             self._callback(block, self.blocksize, time_info, status)
         except CallbackStop:
             self._widget.stop()
-        except CallbackAbort:
+        except CallbackAbort as abort:
             block[:] = 0
-            self._widget.stop()
+            cause = abort.__cause__  # `raise CallbackAbort from err`, as pyquist does
+            if cause is None:
+                self._widget.stop()
+            else:  # a traceback printed here reaches no cell, so show it
+                self._widget._fail(f"callback: {type(cause).__name__}: {cause}")
         self._frames_done += self.blocksize
 
     def _on_playing(self, change) -> None:
         if not change["new"] and self._finished_callback is not None:
             self._finished_callback()
+
+    def _ended(self) -> None:
+        """Warn if the browser never asked for audio between start and stop."""
+        if self._started and self._frames_done == 0:
+            warnings.warn(
+                "stream stopped before the browser asked for any audio. Blocks are "
+                "only made while no cell runs, so start the stream in one cell and "
+                "stop it in a later one (a `with` block around time.sleep() is silent).",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        self._started = False
 
     # -- sounddevice's stream API -----------------------------------------------
 
@@ -318,6 +339,7 @@ class OutputStream:
             raise RuntimeError("stream is closed")
         self._dropouts_seen = 0
         self._frames_done = 0
+        self._started = True
         if not self._displayed:
             from IPython.display import display
 
@@ -327,16 +349,19 @@ class OutputStream:
 
     def stop(self, ignore_errors: bool = True) -> None:
         """Stop playback."""
+        self._ended()
         self._widget.stop()
 
     def abort(self, ignore_errors: bool = True) -> None:
         """Same as :meth:`stop`."""
+        self._ended()
         self._widget.stop()
 
     def close(self, ignore_errors: bool = True) -> None:
         """Stop and remove the widget."""
         if self._closed:
             return
+        self._ended()
         self._widget.stop()
         self._widget.close()
         self._closed = True
@@ -348,3 +373,23 @@ class OutputStream:
     def __exit__(self, *exc) -> None:
         self.stop()
         self.close()
+
+
+class _NoInput:
+    """Real-time input: not available in the browser."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        raise RuntimeError(
+            f"sd.{type(self).__name__} can't run in the browser: browseraudio has "
+            "no real-time input, only OutputStream. To capture the mic, use "
+            "`rec = browseraudio.record(duration)`, click Record, then read "
+            "`rec.samples` in a later cell."
+        )
+
+
+class InputStream(_NoInput):
+    """Not supported in the browser: raises (no real-time input)."""
+
+
+class Stream(_NoInput):
+    """Not supported in the browser: raises (no real-time input)."""

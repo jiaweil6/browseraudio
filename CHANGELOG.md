@@ -6,6 +6,17 @@ All notable changes to **browseraudio** are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `sounddevice.InputStream` / `sounddevice.Stream` raise with guidance toward
+  `record()` instead of an `AttributeError` (there is no real-time input).
+
+### Changed
+- `sounddevice.OutputStream` shows the cause of a `CallbackAbort` raised from
+  another error in the widget. pyquist 0.3's `Stream` reports callback errors
+  this way, and the traceback it prints reaches no cell.
+- `sounddevice.OutputStream` warns when stopped before the browser asked for
+  any audio, e.g. a `with` block around `time.sleep()` in one cell.
+
 ## [0.4.1] — 2026-11-02
 
 ### Changed

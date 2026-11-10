@@ -84,6 +84,11 @@ import sys, browseraudio.sounddevice
 sys.modules["sounddevice"] = browseraudio.sounddevice
 ```
 
+That includes [pyquist](https://gclef-cmu.org/pyquist)'s `pq.Stream` (0.3+), for output:
+register the facade before `import pyquist`, call `s = pq.Stream(callback); s.start()`
+in one cell and `s.stop()` in a later one. Blocks are only made between cells, so
+`with pq.Stream(callback): time.sleep(5)` plays nothing.
+
 ## API
 
 | Call | What it does |
@@ -93,7 +98,7 @@ sys.modules["sounddevice"] = browseraudio.sounddevice
 | `keyboard(render=None, sample_rate=None, *, wavetable=None, …)` → `Keyboard` | `render(freq) -> ndarray` per note, or a looped `wavetable`. Options: `attack/decay/sustain/release`, `gain`, `one_shot`, `max_voices`, `keymap`, `input`, `genie_temperature`, `genie_checkpoint`. `.events`, `.render()`, `.on_note(cb)`, `.clear()`. |
 | `stream(callback, sample_rate=44100, block_size=512, *, …)` → `Stream` | `callback(block)` per block. Options: `channels`, `lookahead` (seconds, default 0.04), `on_note(midi, on)`, `keymap`, `input`, `genie_range`, `genie_temperature`, `genie_checkpoint`. `.start()`, `.stop()`, `.playing`, `.error`, `.dropouts`. |
 | `KeyMap(keys, table, start=0, labels=None)` | Key codes → MIDI through a state machine: `table[state][i] = (midi or None, next_state)`. `KeyMap.musical_typing(base=60)`. |
-| `browseraudio.sounddevice` | `play`, `wait`, `OutputStream` (callback mode), `query_devices`, `default`, `CallbackStop`/`CallbackAbort`, `CallbackFlags`. `rec` raises; use `record`. |
+| `browseraudio.sounddevice` | `play`, `wait`, `OutputStream` (callback mode), `query_devices`, `default`, `CallbackStop`/`CallbackAbort`, `CallbackFlags`. `rec`, `InputStream` and `Stream` raise (no real-time input); use `record`. |
 
 ## How it works
 
@@ -113,6 +118,7 @@ in a Web Worker, so a control change is heard after the queue plus one round tri
 | `rec.samples` is `None` | Read it in a later cell, after recording. |
 | Stream crackles | A cell is running, the callback is too slow (see "% of budget"), or `lookahead` is too short. |
 | Stream started from code is silent | Click **Enable audio** (browser autoplay policy). |
+| Stream silent inside `with` / `time.sleep()` | Blocks are only made between cells: start it in one cell, stop it in a later one. |
 | Keys don't play | Click the widget first. |
 | Genie can't load | `storage.googleapis.com` must be reachable; or self-host and pass `genie_checkpoint=`. |
 
